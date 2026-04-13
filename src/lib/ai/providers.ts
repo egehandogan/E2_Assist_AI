@@ -107,8 +107,11 @@ async function callGemini(
     body.tools = [{ google_search: {} }];
   }
 
+  // Try newest model first, fall back to lite on quota issues
+  const geminiModel = "gemini-2.5-flash";
+
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -127,7 +130,7 @@ async function callGemini(
   return {
     content: text,
     model: "gemini-flash",
-    modelName: "Gemini 2.0 Flash",
+    modelName: "Gemini 2.5 Flash",
   };
 }
 
