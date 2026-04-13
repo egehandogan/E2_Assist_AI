@@ -3,62 +3,73 @@
 import { useState, useRef, useEffect } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import {
-  Bot, Send, Sparkles, Globe, Paperclip, Image,
-  ChevronDown, Plus, Trash2, Copy, ThumbsUp, ThumbsDown,
-  Zap, Brain, Search
+  Send, Sparkles, Globe, Paperclip, Image,
+  ChevronDown, Plus, Copy, ThumbsUp, ThumbsDown, Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-type AIModel = "claude" | "openai" | "gemini" | "auto";
+type AIModel = "auto" | "claude" | "haiku" | "gemini" | "openai";
+
+interface RouteInfo {
+  model: string;
+  reason: string;
+  maxTokens: number;
+  cached: boolean;
+}
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  model?: AIModel;
+  modelName?: string;
+  taskType?: string;
+  route?: RouteInfo;
+  usage?: { inputTokens?: number; outputTokens?: number };
   timestamp: Date;
 }
 
-const modelConfig = {
-  claude: {
-    name: "Claude",
-    provider: "Anthropic",
-    icon: "🟣",
-    color: "bg-violet-100 text-violet-700",
-    description: "Analiz, yazarlık, kod",
-  },
-  openai: {
-    name: "GPT-4",
-    provider: "OpenAI",
-    icon: "⚫",
-    color: "bg-gray-100 text-gray-700",
-    description: "Genel amaçlı, çok yönlü",
-  },
-  gemini: {
-    name: "Gemini",
-    provider: "Google",
-    icon: "🔵",
-    color: "bg-blue-100 text-blue-700",
-    description: "Arama, görsel analiz",
-  },
+const modelConfig: Record<AIModel, { name: string; icon: string; color: string; description: string }> = {
   auto: {
     name: "Otomatik",
-    provider: "En iyi AI",
     icon: "✨",
     color: "bg-amber-100 text-amber-700",
-    description: "İsteğe göre model seç",
+    description: "Göreve göre en uygun model",
+  },
+  claude: {
+    name: "Sonnet 4.6",
+    icon: "🟣",
+    color: "bg-violet-100 text-violet-700",
+    description: "Karmaşık analiz ve yazarlık",
+  },
+  haiku: {
+    name: "Haiku 4.5",
+    icon: "⚡",
+    color: "bg-purple-100 text-purple-700",
+    description: "Hızlı ve ekonomik",
+  },
+  gemini: {
+    name: "Gemini Flash",
+    icon: "🔵",
+    color: "bg-blue-100 text-blue-700",
+    description: "İnternet araması (ücretsiz)",
+  },
+  openai: {
+    name: "GPT-4o mini",
+    icon: "⚫",
+    color: "bg-gray-100 text-gray-700",
+    description: "Yedek model",
   },
 };
 
 const quickPrompts = [
-  { label: "Bugünkü maileleri özetle", icon: "📧" },
+  { label: "Bugünkü mailleri özetle", icon: "📧" },
   { label: "Toplantı notlarını düzenle", icon: "📝" },
   { label: "Görev listemi analiz et", icon: "✅" },
-  { label: "İnternette araştır", icon: "🌐" },
-  { label: "Resmi mektup yaz", icon: "📄" },
+  { label: "Güncel haberleri araştır", icon: "🌐" },
+  { label: "Resmi mektup taslağı yaz", icon: "📄" },
   { label: "Bütçe önerileri sun", icon: "💰" },
 ];
 
@@ -67,6 +78,18 @@ const mockHistory = [
   { id: "s2", title: "Nisan raporu analizi", date: "Dün" },
   { id: "s3", title: "Genel kurul gündemi", date: "3 gün önce" },
 ];
+
+const taskTypeLabels: Record<string, string> = {
+  simple_question: "Basit soru",
+  summary: "Özet",
+  email_analysis: "Mail analizi",
+  meeting_notes: "Toplantı notu",
+  document_draft: "Belge taslağı",
+  complex_analysis: "Detaylı analiz",
+  web_search: "İnternet araması",
+  translation: "Çeviri",
+  task_extraction: "Görev çıkarma",
+};
 
 export default function AIPage() {
   const [model, setModel] = useState<AIModel>("auto");
@@ -81,13 +104,14 @@ export default function AIPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const sendMessage = async () => {
-    if (!input.trim() || isLoading) return;
+  const sendMessage = async (overrideInput?: string) => {
+    const text = overrideInput ?? input;
+    if (!text.trim() || isLoading) return;
 
     const userMsg: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: input,
+      content: text,
       timestamp: new Date(),
     };
 
@@ -109,14 +133,16 @@ export default function AIPage() {
         }),
       });
 
-      if (!res.ok) throw new Error("API error");
       const data = await res.json();
 
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: data.content || "Bir hata oluştu.",
-        model: data.model || model,
+        content: data.content,
+        modelName: data.modelName,
+        taskType: data.taskType,
+        route: data.route,
+        usage: data.usage,
         timestamp: new Date(),
       };
 
@@ -127,7 +153,7 @@ export default function AIPage() {
         {
           id: (Date.now() + 1).toString(),
           role: "assistant",
-          content: "Bağlantı hatası. Lütfen API anahtarlarınızı yapılandırın.",
+          content: "Bağlantı hatası. Lütfen tekrar deneyin.",
           timestamp: new Date(),
         },
       ]);
@@ -141,43 +167,60 @@ export default function AIPage() {
   return (
     <div className="flex h-full">
       {/* History sidebar */}
-      <div className="w-60 bg-gray-900 flex flex-col">
-        <div className="p-4 border-b border-gray-700">
+      <div className="w-56 bg-gray-900 flex flex-col flex-shrink-0">
+        <div className="p-3 border-b border-gray-700">
           <Button
-            className="w-full gap-2 bg-violet-600 hover:bg-violet-700"
+            className="w-full gap-2 bg-violet-600 hover:bg-violet-700 text-xs"
             size="sm"
             onClick={() => setMessages([])}
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5" />
             Yeni Sohbet
           </Button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-2">
-          <p className="text-xs text-gray-500 px-2 mb-2">Geçmiş</p>
+          <p className="text-xs text-gray-500 px-2 mb-2 mt-1">Geçmiş</p>
           {mockHistory.map((h) => (
             <button
               key={h.id}
-              className="w-full text-left px-3 py-2.5 rounded-lg text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition-colors"
+              className="w-full text-left px-3 py-2 rounded-lg text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition-colors mb-0.5"
             >
               <p className="font-medium truncate">{h.title}</p>
-              <p className="text-gray-500 mt-0.5">{h.date}</p>
+              <p className="text-gray-500 text-xs mt-0.5">{h.date}</p>
             </button>
           ))}
+        </div>
+
+        {/* Cost indicator */}
+        <div className="p-3 border-t border-gray-700">
+          <div className="bg-gray-800 rounded-lg p-2.5">
+            <p className="text-xs text-gray-400 mb-1">Bu oturum</p>
+            <p className="text-xs text-green-400 font-medium">
+              ~{messages.filter(m => m.role === "assistant").reduce((acc, m) => {
+                return acc + (m.usage?.outputTokens ?? 0);
+              }, 0)} token
+            </p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              ≈ ${(messages.filter(m => m.role === "assistant").reduce((acc, m) => {
+                return acc + (m.usage?.outputTokens ?? 0);
+              }, 0) * 0.000004).toFixed(5)}
+            </p>
+          </div>
         </div>
       </div>
 
       {/* Main chat area */}
-      <div className="flex-1 flex flex-col bg-gray-50">
+      <div className="flex-1 flex flex-col bg-gray-50 min-w-0">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-100">
+        <div className="flex items-center justify-between px-5 py-3 bg-white border-b border-gray-100 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-violet-600 rounded-full flex items-center justify-center">
+            <div className="w-8 h-8 bg-violet-600 rounded-full flex items-center justify-center flex-shrink-0">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
             <div>
               <p className="text-sm font-semibold text-gray-900">AI Asistan</p>
-              <p className="text-xs text-gray-500">Nurevşan Doğan için kişisel asistan</p>
+              <p className="text-xs text-gray-500">Nurevşan Doğan — Smart Routing aktif</p>
             </div>
           </div>
 
@@ -186,21 +229,21 @@ export default function AIPage() {
             <button
               onClick={() => setWebSearch(!webSearch)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all",
                 webSearch
                   ? "bg-blue-100 text-blue-700"
                   : "bg-gray-100 text-gray-500 hover:bg-gray-200"
               )}
             >
               <Globe className="w-3.5 h-3.5" />
-              İnternet
+              {webSearch ? "İnternet: Açık" : "İnternet"}
             </button>
 
             {/* Model selector */}
             <div className="relative">
               <button
                 onClick={() => setShowModelSelect(!showModelSelect)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs font-medium text-gray-700 transition-colors"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-xs font-medium text-gray-700 transition-colors"
               >
                 <span>{selectedModel.icon}</span>
                 <span>{selectedModel.name}</span>
@@ -208,21 +251,25 @@ export default function AIPage() {
               </button>
 
               {showModelSelect && (
-                <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-xl border border-gray-100 shadow-lg z-10 overflow-hidden">
-                  {(Object.entries(modelConfig) as [AIModel, typeof modelConfig.claude][]).map(([key, cfg]) => (
+                <div className="absolute right-0 top-full mt-1 w-60 bg-white rounded-xl border border-gray-100 shadow-xl z-10 overflow-hidden">
+                  <div className="p-2 border-b border-gray-100">
+                    <p className="text-xs text-gray-400 px-2">Model Seç</p>
+                  </div>
+                  {(Object.entries(modelConfig) as [AIModel, typeof modelConfig.auto][]).map(([key, cfg]) => (
                     <button
                       key={key}
                       onClick={() => { setModel(key); setShowModelSelect(false); }}
                       className={cn(
-                        "w-full flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors text-left",
+                        "w-full flex items-start gap-3 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left",
                         model === key && "bg-violet-50"
                       )}
                     >
-                      <span className="text-lg">{cfg.icon}</span>
-                      <div>
+                      <span className="text-base">{cfg.icon}</span>
+                      <div className="flex-1">
                         <p className="text-sm font-medium text-gray-900">{cfg.name}</p>
-                        <p className="text-xs text-gray-500">{cfg.description}</p>
+                        <p className="text-xs text-gray-400">{cfg.description}</p>
                       </div>
+                      {model === key && <span className="text-violet-500 text-xs">✓</span>}
                     </button>
                   ))}
                 </div>
@@ -232,7 +279,7 @@ export default function AIPage() {
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-5">
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center max-w-lg mx-auto">
               <div className="w-16 h-16 bg-violet-100 rounded-2xl flex items-center justify-center mb-4">
@@ -241,19 +288,22 @@ export default function AIPage() {
               <h2 className="text-xl font-bold text-gray-900 mb-2">
                 Merhaba, Nurevşan! 👋
               </h2>
-              <p className="text-gray-500 text-sm mb-6">
-                Size nasıl yardımcı olabilirim? E-postalarınızı analiz edebilir,
-                toplantı notları tutabilir veya araştırma yapabilirim.
+              <p className="text-gray-500 text-sm mb-1">
+                Smart Routing sistemi görevinize göre en uygun modeli otomatik seçer.
+              </p>
+              <p className="text-gray-400 text-xs mb-6 flex items-center gap-1">
+                <Zap className="w-3 h-3 text-amber-400" />
+                Basit sorular → Haiku (en ucuz) · Karmaşık analiz → Sonnet · İnternet → Gemini
               </p>
               <div className="grid grid-cols-2 gap-2 w-full">
                 {quickPrompts.map((p) => (
                   <button
                     key={p.label}
-                    onClick={() => setInput(p.label)}
-                    className="flex items-center gap-2 p-3 rounded-xl bg-white border border-gray-200 hover:border-violet-300 hover:bg-violet-50 text-left text-sm text-gray-700 transition-all"
+                    onClick={() => sendMessage(p.label)}
+                    className="flex items-center gap-2 p-3 rounded-xl bg-white border border-gray-200 hover:border-violet-300 hover:bg-violet-50 text-left transition-all"
                   >
-                    <span>{p.icon}</span>
-                    <span className="text-xs">{p.label}</span>
+                    <span className="text-lg">{p.icon}</span>
+                    <span className="text-xs text-gray-700">{p.label}</span>
                   </button>
                 ))}
               </div>
@@ -272,7 +322,7 @@ export default function AIPage() {
                     "flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-sm",
                     msg.role === "user"
                       ? "bg-violet-600 text-white font-bold"
-                      : "bg-white border border-gray-200"
+                      : "bg-white border border-gray-200 text-sm"
                   )}>
                     {msg.role === "user" ? "N" : "✨"}
                   </div>
@@ -289,22 +339,41 @@ export default function AIPage() {
                     )}>
                       <p className="whitespace-pre-wrap">{msg.content}</p>
                     </div>
+
+                    {/* Assistant metadata */}
                     {msg.role === "assistant" && (
-                      <div className="flex items-center gap-2 mt-1.5 pl-1">
-                        {msg.model && (
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${modelConfig[msg.model]?.color}`}>
-                            {modelConfig[msg.model]?.name}
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1.5 pl-1">
+                        {msg.modelName && (
+                          <span className="text-xs bg-violet-50 text-violet-600 px-2 py-0.5 rounded-full font-medium">
+                            {msg.modelName}
                           </span>
                         )}
-                        <button className="text-gray-300 hover:text-gray-500">
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-                        <button className="text-gray-300 hover:text-green-500">
-                          <ThumbsUp className="w-3.5 h-3.5" />
-                        </button>
-                        <button className="text-gray-300 hover:text-red-400">
-                          <ThumbsDown className="w-3.5 h-3.5" />
-                        </button>
+                        {msg.taskType && (
+                          <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                            {taskTypeLabels[msg.taskType] ?? msg.taskType}
+                          </span>
+                        )}
+                        {msg.usage?.outputTokens && (
+                          <span className="text-xs text-gray-300">
+                            {msg.usage.outputTokens} token
+                          </span>
+                        )}
+                        {msg.route?.cached && (
+                          <span className="text-xs text-green-500 flex items-center gap-0.5">
+                            <Zap className="w-3 h-3" /> önbellek
+                          </span>
+                        )}
+                        <div className="flex items-center gap-1 ml-1">
+                          <button className="text-gray-300 hover:text-gray-500">
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                          <button className="text-gray-300 hover:text-green-500">
+                            <ThumbsUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button className="text-gray-300 hover:text-red-400">
+                            <ThumbsDown className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -317,10 +386,13 @@ export default function AIPage() {
                     ✨
                   </div>
                   <div className="bg-white border border-gray-100 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 items-center">
                       <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce" />
-                      <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce [animation-delay:0.2s]" />
-                      <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce [animation-delay:0.4s]" />
+                      <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce [animation-delay:0.15s]" />
+                      <div className="w-2 h-2 bg-violet-400 rounded-full animate-bounce [animation-delay:0.3s]" />
+                      <span className="text-xs text-gray-400 ml-2">
+                        {webSearch ? "İnternet araması yapıyor..." : "Yanıt hazırlanıyor..."}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -331,11 +403,11 @@ export default function AIPage() {
         </div>
 
         {/* Input area */}
-        <div className="px-6 py-4 bg-white border-t border-gray-100">
+        <div className="px-5 py-4 bg-white border-t border-gray-100 flex-shrink-0">
           <div className="max-w-3xl mx-auto">
             <div className="relative flex items-end gap-2 bg-gray-50 border border-gray-200 rounded-2xl p-3 focus-within:border-violet-400 transition-colors">
               <Textarea
-                placeholder="Mesajınızı yazın... (Shift+Enter: yeni satır, Enter: gönder)"
+                placeholder="Mesajınızı yazın... (Shift+Enter: yeni satır)"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
@@ -356,17 +428,19 @@ export default function AIPage() {
                 </button>
                 <Button
                   size="icon"
-                  className="h-8 w-8 rounded-xl"
-                  onClick={sendMessage}
+                  className="h-8 w-8 rounded-xl flex-shrink-0"
+                  onClick={() => sendMessage()}
                   disabled={!input.trim() || isLoading}
                 >
                   <Send className="w-4 h-4" />
                 </Button>
               </div>
             </div>
-            <p className="text-xs text-gray-400 text-center mt-2">
-              {selectedModel.icon} {selectedModel.name} tarafından yanıtlanıyor
-              {webSearch && " · İnternet araması aktif"}
+            <p className="text-xs text-gray-400 text-center mt-1.5">
+              {model === "auto"
+                ? "✨ Otomatik model seçimi aktif — göreve göre en ucuz model kullanılır"
+                : `${selectedModel.icon} ${selectedModel.name} seçili`}
+              {webSearch && " · 🌐 İnternet araması açık (Gemini)"}
             </p>
           </div>
         </div>
