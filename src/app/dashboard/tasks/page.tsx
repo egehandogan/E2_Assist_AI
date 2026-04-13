@@ -1,95 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import {
-  CheckSquare, Plus, Filter, Calendar, Clock, User,
-  AlertTriangle, ChevronDown, MoreHorizontal, Bot,
-  ArrowUp, Minus, ArrowDown, Circle, CheckCircle2
+  CheckSquare, Plus, Calendar, Clock, User,
+  AlertTriangle, MoreHorizontal, Bot,
+  ArrowUp, Minus, ArrowDown, Circle, CheckCircle2, Loader2, Trash2
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Modal } from "@/components/ui/modal";
+import { useTaskStore, aiAnalyze } from "@/lib/store";
 import { cn } from "@/lib/utils";
-
-interface Task {
-  id: string;
-  title: string;
-  description?: string;
-  assignee?: string;
-  dueDate: string;
-  priority: "urgent" | "high" | "medium" | "low";
-  status: "pending" | "in_progress" | "completed";
-  category?: string;
-  fromMeeting?: string;
-}
-
-const mockTasks: Task[] = [
-  {
-    id: "1",
-    title: "Sponsorluk teklifini hazırla ve gönder",
-    description: "ABC Şirketi için sponsorluk teklif dosyasını hazırla",
-    assignee: "Nurevşan Doğan",
-    dueDate: "Bugün",
-    priority: "urgent",
-    status: "in_progress",
-    category: "İş Geliştirme",
-    fromMeeting: "Yönetim Kurulu - 10 Nisan",
-  },
-  {
-    id: "2",
-    title: "Yönetim kurulu kararını noterden onaylat",
-    dueDate: "Yarın",
-    priority: "high",
-    status: "pending",
-    category: "Hukuki",
-  },
-  {
-    id: "3",
-    title: "Etkinlik davetiyelerini hazırla ve gönder",
-    description: "15 Mayıs etkinliği için 200 kişiye davetiye",
-    assignee: "Fatma Demir",
-    dueDate: "12 Mayıs",
-    priority: "high",
-    status: "pending",
-    category: "Etkinlik",
-    fromMeeting: "Etkinlik Planlama - 8 Nisan",
-  },
-  {
-    id: "4",
-    title: "Bütçe raporunu güncelle",
-    dueDate: "20 Mayıs",
-    priority: "medium",
-    status: "pending",
-    category: "Mali",
-  },
-  {
-    id: "5",
-    title: "Yeni üye kayıt sistemini test et",
-    assignee: "Mehmet Kaya",
-    dueDate: "25 Mayıs",
-    priority: "medium",
-    status: "pending",
-    category: "Teknoloji",
-  },
-  {
-    id: "6",
-    title: "Faaliyet raporunu yaz",
-    dueDate: "30 Mayıs",
-    priority: "low",
-    status: "pending",
-    category: "Raporlama",
-  },
-  {
-    id: "7",
-    title: "Web sitesini güncelle",
-    dueDate: "1 Haziran",
-    priority: "low",
-    status: "completed",
-    category: "Teknoloji",
-  },
-];
 
 const priorityConfig = {
   urgent: { label: "Acil", icon: AlertTriangle, color: "text-red-500", bg: "bg-red-100" },
@@ -98,30 +23,40 @@ const priorityConfig = {
   low: { label: "Düşük", icon: ArrowDown, color: "text-green-500", bg: "bg-green-100" },
 };
 
-const statusConfig = {
-  pending: { label: "Bekliyor", color: "text-gray-500" },
-  in_progress: { label: "Devam ediyor", color: "text-blue-500" },
-  completed: { label: "Tamamlandı", color: "text-green-500" },
-};
-
 type FilterType = "all" | "pending" | "in_progress" | "completed";
 
-export default function TasksPage() {
-  const [tasks, setTasks] = useState<Task[]>(mockTasks);
-  const [filter, setFilter] = useState<FilterType>("all");
-  const [showAddTask, setShowAddTask] = useState(false);
-  const [newTaskTitle, setNewTaskTitle] = useState("");
-  const [groupBy, setGroupBy] = useState<"status" | "priority" | "none">("status");
+interface NewTaskForm {
+  title: string;
+  description: string;
+  assignee: string;
+  dueDate: string;
+  priority: "urgent" | "high" | "medium" | "low";
+  category: string;
+}
 
-  const toggleTaskStatus = (id: string) => {
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? { ...t, status: t.status === "completed" ? "pending" : "completed" }
-          : t
-      )
-    );
-  };
+const defaultForm: NewTaskForm = {
+  title: "",
+  description: "",
+  assignee: "",
+  dueDate: "",
+  priority: "medium",
+  category: "",
+};
+
+export default function TasksPage() {
+  const { tasks, loading, fetch, add, toggle, remove } = useTaskStore();
+  const [filter, setFilter] = useState<FilterType>("all");
+  const [showModal, setShowModal] = useState(false);
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [form, setForm] = useState<NewTaskForm>(defaultForm);
+  const [saving, setSaving] = useState(false);
+  const [aiText, setAiText] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiTasks, setAiTasks] = useState<NewTaskForm[]>([]);
+
+  useEffect(() => {
+    fetch();
+  }, [fetch]);
 
   const filteredTasks = tasks.filter((t) => {
     if (filter === "all") return true;
@@ -134,6 +69,61 @@ export default function TasksPage() {
     inProgress: tasks.filter((t) => t.status === "in_progress").length,
     completed: tasks.filter((t) => t.status === "completed").length,
     urgent: tasks.filter((t) => t.priority === "urgent" && t.status !== "completed").length,
+  };
+
+  const handleSave = async () => {
+    if (!form.title.trim()) return;
+    setSaving(true);
+    await add({
+      title: form.title,
+      description: form.description || null,
+      assignee: form.assignee || null,
+      dueDate: form.dueDate || null,
+      priority: form.priority,
+      status: "pending",
+      category: form.category || null,
+    });
+    setSaving(false);
+    setForm(defaultForm);
+    setShowModal(false);
+  };
+
+  const handleAIExtract = async () => {
+    if (!aiText.trim()) return;
+    setAiLoading(true);
+    const result = await aiAnalyze("extract_tasks", aiText);
+    if (result.tasks) {
+      setAiTasks(
+        result.tasks.map((t: { title?: string; assignee?: string; priority?: string; dueDate?: string }) => ({
+          title: t.title ?? "",
+          description: "",
+          assignee: t.assignee ?? "",
+          dueDate: t.dueDate ?? "",
+          priority: (["urgent", "high", "medium", "low"].includes(t.priority ?? "") ? t.priority : "medium") as NewTaskForm["priority"],
+          category: "",
+        }))
+      );
+    }
+    setAiLoading(false);
+  };
+
+  const handleAddAITasks = async () => {
+    setSaving(true);
+    for (const t of aiTasks) {
+      await add({
+        title: t.title,
+        description: t.description || null,
+        assignee: t.assignee || null,
+        dueDate: t.dueDate || null,
+        priority: t.priority,
+        status: "pending",
+        category: t.category || null,
+      });
+    }
+    setSaving(false);
+    setAiTasks([]);
+    setAiText("");
+    setShowAIModal(false);
   };
 
   return (
@@ -166,175 +156,230 @@ export default function TasksPage() {
                 onClick={() => setFilter(f)}
                 className={cn(
                   "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                  filter === f
-                    ? "bg-violet-100 text-violet-700"
-                    : "text-gray-500 hover:bg-gray-100"
+                  filter === f ? "bg-violet-100 text-violet-700" : "text-gray-500 hover:bg-gray-100"
                 )}
               >
                 {f === "all" ? "Tümü" : f === "pending" ? "Bekliyor" : f === "in_progress" ? "Devam" : "Tamamlandı"}
               </button>
             ))}
           </div>
-
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setShowAddTask(true)}
-            >
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowAIModal(true)}>
               <Bot className="w-3.5 h-3.5" />
               AI ile Görev Oluştur
             </Button>
-            <Button size="sm" className="gap-1.5" onClick={() => setShowAddTask(true)}>
+            <Button size="sm" className="gap-1.5" onClick={() => setShowModal(true)}>
               <Plus className="w-4 h-4" />
               Yeni Görev
             </Button>
           </div>
         </div>
 
-        {/* Add task input */}
-        {showAddTask && (
-          <Card className="p-4">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Görev başlığı..."
-                value={newTaskTitle}
-                onChange={(e) => setNewTaskTitle(e.target.value)}
-                className="flex-1"
-                autoFocus
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && newTaskTitle.trim()) {
-                    setTasks((prev) => [
-                      {
-                        id: Date.now().toString(),
-                        title: newTaskTitle,
-                        dueDate: "Belirtilmedi",
-                        priority: "medium",
-                        status: "pending",
-                      },
-                      ...prev,
-                    ]);
-                    setNewTaskTitle("");
-                    setShowAddTask(false);
-                  }
-                  if (e.key === "Escape") setShowAddTask(false);
-                }}
-              />
-              <Button
-                onClick={() => {
-                  if (newTaskTitle.trim()) {
-                    setTasks((prev) => [
-                      {
-                        id: Date.now().toString(),
-                        title: newTaskTitle,
-                        dueDate: "Belirtilmedi",
-                        priority: "medium",
-                        status: "pending",
-                      },
-                      ...prev,
-                    ]);
-                    setNewTaskTitle("");
-                  }
-                  setShowAddTask(false);
-                }}
-              >
-                Ekle
-              </Button>
-              <Button variant="ghost" onClick={() => setShowAddTask(false)}>İptal</Button>
-            </div>
-          </Card>
-        )}
-
         {/* Task list */}
-        <div className="space-y-2">
-          {filteredTasks.map((task) => {
-            const priority = priorityConfig[task.priority];
-            const PriorityIcon = priority.icon;
-            return (
-              <div
-                key={task.id}
-                className={cn(
-                  "flex items-start gap-3 p-4 rounded-xl border bg-white hover:shadow-sm transition-all cursor-pointer",
-                  task.status === "completed" && "opacity-60",
-                  task.priority === "urgent" && task.status !== "completed" && "border-red-200 bg-red-50/30"
-                )}
-              >
-                {/* Checkbox */}
-                <button
-                  onClick={() => toggleTaskStatus(task.id)}
-                  className="flex-shrink-0 mt-0.5"
+        {loading ? (
+          <div className="flex items-center justify-center py-12 text-gray-400">
+            <Loader2 className="w-6 h-6 animate-spin mr-2" />
+            Yükleniyor...
+          </div>
+        ) : filteredTasks.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            <CheckSquare className="w-10 h-10 mx-auto mb-3 opacity-30" />
+            <p className="text-sm">Henüz görev yok. Yeni görev ekleyin.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {filteredTasks.map((task) => {
+              const priority = priorityConfig[task.priority];
+              const PriorityIcon = priority.icon;
+              return (
+                <div
+                  key={task.id}
+                  className={cn(
+                    "flex items-start gap-3 p-4 rounded-xl border bg-white hover:shadow-sm transition-all",
+                    task.status === "completed" && "opacity-60",
+                    task.priority === "urgent" && task.status !== "completed" && "border-red-200 bg-red-50/30"
+                  )}
                 >
-                  {task.status === "completed" ? (
-                    <CheckCircle2 className="w-5 h-5 text-green-500" />
-                  ) : task.status === "in_progress" ? (
-                    <div className="w-5 h-5 rounded-full border-2 border-blue-500 flex items-center justify-center">
-                      <div className="w-2 h-2 rounded-full bg-blue-500" />
+                  <button onClick={() => toggle(task.id)} className="flex-shrink-0 mt-0.5">
+                    {task.status === "completed" ? (
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    ) : task.status === "in_progress" ? (
+                      <div className="w-5 h-5 rounded-full border-2 border-blue-500 flex items-center justify-center">
+                        <div className="w-2 h-2 rounded-full bg-blue-500" />
+                      </div>
+                    ) : (
+                      <Circle className="w-5 h-5 text-gray-300 hover:text-violet-400" />
+                    )}
+                  </button>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className={cn(
+                        "text-sm font-medium text-gray-900",
+                        task.status === "completed" && "line-through text-gray-400"
+                      )}>
+                        {task.title}
+                      </p>
+                      <button
+                        onClick={() => remove(task.id)}
+                        className="flex-shrink-0 text-gray-300 hover:text-red-400 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                  ) : (
-                    <Circle className="w-5 h-5 text-gray-300 hover:text-violet-400" />
-                  )}
-                </button>
 
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className={cn(
-                      "text-sm font-medium text-gray-900",
-                      task.status === "completed" && "line-through text-gray-400"
-                    )}>
-                      {task.title}
-                    </p>
-                    <button className="flex-shrink-0 text-gray-400 hover:text-gray-600">
-                      <MoreHorizontal className="w-4 h-4" />
-                    </button>
-                  </div>
+                    {task.description && (
+                      <p className="text-xs text-gray-400 mt-0.5 truncate">{task.description}</p>
+                    )}
 
-                  {task.description && (
-                    <p className="text-xs text-gray-400 mt-0.5 truncate">{task.description}</p>
-                  )}
-
-                  <div className="flex flex-wrap items-center gap-2 mt-2">
-                    {/* Priority */}
-                    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${priority.bg} ${priority.color}`}>
-                      <PriorityIcon className="w-3 h-3" />
-                      {priority.label}
-                    </span>
-
-                    {/* Due date */}
-                    <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                      <Calendar className="w-3 h-3" />
-                      {task.dueDate}
-                    </span>
-
-                    {/* Assignee */}
-                    {task.assignee && (
-                      <span className="inline-flex items-center gap-1 text-xs text-gray-500">
-                        <User className="w-3 h-3" />
-                        {task.assignee}
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium ${priority.bg} ${priority.color}`}>
+                        <PriorityIcon className="w-3 h-3" />
+                        {priority.label}
                       </span>
-                    )}
-
-                    {/* Category */}
-                    {task.category && (
-                      <Badge variant="secondary" className="text-xs py-0">
-                        {task.category}
-                      </Badge>
-                    )}
-
-                    {/* From meeting */}
-                    {task.fromMeeting && (
-                      <span className="text-xs text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
-                        📅 {task.fromMeeting}
-                      </span>
-                    )}
+                      {task.dueDate && (
+                        <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                          <Calendar className="w-3 h-3" />
+                          {task.dueDate}
+                        </span>
+                      )}
+                      {task.assignee && (
+                        <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                          <User className="w-3 h-3" />
+                          {task.assignee}
+                        </span>
+                      )}
+                      {task.category && (
+                        <Badge variant="secondary" className="text-xs py-0">{task.category}</Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
+
+      {/* New Task Modal */}
+      <Modal open={showModal} onClose={() => { setShowModal(false); setForm(defaultForm); }} title="Yeni Görev">
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs font-medium text-gray-700 mb-1 block">Görev Başlığı *</label>
+            <Input
+              placeholder="Görev başlığı..."
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-700 mb-1 block">Açıklama</label>
+            <Textarea
+              placeholder="Görev detayları..."
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={3}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">Atanan Kişi</label>
+              <Input
+                placeholder="Ad Soyad"
+                value={form.assignee}
+                onChange={(e) => setForm({ ...form, assignee: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">Son Tarih</label>
+              <Input
+                type="date"
+                value={form.dueDate}
+                onChange={(e) => setForm({ ...form, dueDate: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">Öncelik</label>
+              <select
+                value={form.priority}
+                onChange={(e) => setForm({ ...form, priority: e.target.value as NewTaskForm["priority"] })}
+                className="w-full h-9 rounded-lg border border-gray-200 px-3 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+              >
+                <option value="urgent">Acil</option>
+                <option value="high">Yüksek</option>
+                <option value="medium">Orta</option>
+                <option value="low">Düşük</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-gray-700 mb-1 block">Kategori</label>
+              <Input
+                placeholder="Örn: Hukuki, Mali..."
+                value={form.category}
+                onChange={(e) => setForm({ ...form, category: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 pt-2">
+            <Button onClick={handleSave} disabled={!form.title.trim() || saving} className="flex-1">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : "Kaydet"}
+            </Button>
+            <Button variant="outline" onClick={() => { setShowModal(false); setForm(defaultForm); }}>
+              İptal
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* AI Task Extract Modal */}
+      <Modal open={showAIModal} onClose={() => { setShowAIModal(false); setAiText(""); setAiTasks([]); }} title="AI ile Görev Oluştur" className="max-w-2xl">
+        <div className="space-y-4">
+          <p className="text-xs text-gray-500">Toplantı notlarınızı veya metin girin — AI otomatik görevler çıkarsın.</p>
+          <Textarea
+            placeholder="Toplantı notları veya yapılacaklar listesi..."
+            value={aiText}
+            onChange={(e) => setAiText(e.target.value)}
+            rows={6}
+          />
+          <Button onClick={handleAIExtract} disabled={!aiText.trim() || aiLoading} variant="outline" className="gap-2">
+            {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bot className="w-4 h-4" />}
+            Görevleri Çıkar
+          </Button>
+
+          {aiTasks.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-gray-700">{aiTasks.length} görev bulundu:</p>
+              {aiTasks.map((t, i) => (
+                <div key={i} className="flex items-center justify-between p-3 bg-violet-50 rounded-lg text-sm">
+                  <div>
+                    <p className="font-medium text-gray-900">{t.title}</p>
+                    <div className="flex gap-2 text-xs text-gray-500 mt-0.5">
+                      {t.assignee && <span>{t.assignee}</span>}
+                      {t.dueDate && <span>{t.dueDate}</span>}
+                      <span className="capitalize">{priorityConfig[t.priority]?.label}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setAiTasks((prev) => prev.filter((_, j) => j !== i))}
+                    className="text-gray-400 hover:text-red-400"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <div className="flex gap-2 pt-2">
+                <Button onClick={handleAddAITasks} disabled={saving} className="flex-1">
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : `${aiTasks.length} Görevi Ekle`}
+                </Button>
+                <Button variant="outline" onClick={() => setAiTasks([])}>Temizle</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

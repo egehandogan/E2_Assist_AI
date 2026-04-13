@@ -5,14 +5,16 @@ import { StickyNote, Send } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { useNoteStore } from "@/lib/store";
 
 export function QuickNote() {
+  const { add } = useNoteStore();
   const [note, setNote] = useState("");
   const [saved, setSaved] = useState(false);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!note.trim()) return;
-    // TODO: API call
+    await add({ content: note, source: "manual" });
     setSaved(true);
     setNote("");
     setTimeout(() => setSaved(false), 2000);
@@ -32,9 +34,7 @@ export function QuickNote() {
           value={note}
           onChange={(e) => setNote(e.target.value)}
           className="text-sm min-h-[80px] resize-none"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && e.ctrlKey) handleSave();
-          }}
+          onKeyDown={(e) => { if (e.key === "Enter" && e.ctrlKey) handleSave(); }}
         />
         <div className="flex items-center justify-between">
           <span className="text-xs text-gray-400">Ctrl+Enter ile kaydet</span>
@@ -46,10 +46,7 @@ export function QuickNote() {
             className="h-7 text-xs"
           >
             {saved ? "Kaydedildi!" : (
-              <>
-                <Send className="w-3 h-3" />
-                Kaydet
-              </>
+              <><Send className="w-3 h-3" />Kaydet</>
             )}
           </Button>
         </div>
