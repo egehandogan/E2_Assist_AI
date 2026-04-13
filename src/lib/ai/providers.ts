@@ -102,36 +102,53 @@ async function callGemini(
     generationConfig: { maxOutputTokens: maxTokens },
   };
 
-  // Enable Google Search grounding for web search
-  if (webSearch) {
-    body.tools = [{ google_search: {} }];
-  }
+  // Fallback model chain: newest → stable → lite
+  const GEMINI_MODELS = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-flash-latest",
+  ];
 
-  // Try newest model first, fall back to lite on quota issues
-  const geminiModel = "gemini-2.5-flash";
-
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+  let lastError = "";
+  for (const geminiModel of GEMINI_MODELS) {
+    // Enable Google Search grounding for web search (not supported on all models)
+    const bodyForModel = { ...body };
+    if (webSearch && geminiModel !== "gemini-2.0-flash-lite") {
+      bodyForModel.tools = [{ google_search: {} }];
     }
-  );
 
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Gemini API error: ${err}`);
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(bodyForModel),
+      }
+    );
+
+    if (res.ok) {
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      return {
+        content: text,
+        model: "gemini-flash",
+        modelName: `Gemini (${geminiModel})`,
+      };
+    }
+
+    const errData = await res.json().catch(() => ({}));
+    const status = (errData as { error?: { code?: number } }).error?.code;
+
+    // Only retry on 503 (overload) or 429 (rate limit), fail fast on others
+    if (status !== 503 && status !== 429) {
+      lastError = JSON.stringify(errData);
+      break;
+    }
+    lastError = JSON.stringify(errData);
   }
 
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-
-  return {
-    content: text,
-    model: "gemini-flash",
-    modelName: "Gemini 2.5 Flash",
-  };
+  throw new Error(`Gemini API error: ${lastError}`);
 }
 
 // ─── GPT-4o-mini (OpenAI) ─────────────────────────────────────────────────────
