@@ -15,9 +15,9 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
   Bell,
 } from "lucide-react";
+import Image from "next/image";
 import { useState, useEffect } from "react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useNotificationStore } from "@/lib/store";
@@ -56,9 +56,13 @@ export function Sidebar() {
     >
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-gray-700">
-        <div className="flex-shrink-0 w-8 h-8 bg-violet-500 rounded-lg flex items-center justify-center">
-          <Sparkles className="w-5 h-5 text-white" />
-        </div>
+        <Image
+          src="/logo.png"
+          alt="Logo"
+          width={32}
+          height={32}
+          className="flex-shrink-0 w-8 h-8 rounded-lg"
+        />
         {!collapsed && (
           <div className="overflow-hidden">
             <p className="text-sm font-bold text-white leading-tight">Asistan Panel</p>
