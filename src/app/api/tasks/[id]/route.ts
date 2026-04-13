@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, dbSafe } from "@/lib/prisma";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -19,8 +19,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     });
     return NextResponse.json(task);
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Güncellenemedi" }, { status: 500 });
+    console.error("[tasks PATCH]", e);
+    return NextResponse.json({ error: "Güncellenemedi" }, { status: 503 });
   }
 }
 
@@ -30,7 +30,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
     await prisma.task.delete({ where: { id } });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Silinemedi" }, { status: 500 });
+    console.error("[tasks DELETE]", e);
+    return NextResponse.json({ error: "Silinemedi" }, { status: 503 });
   }
 }

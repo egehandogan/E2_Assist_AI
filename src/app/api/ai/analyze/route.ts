@@ -7,29 +7,33 @@ const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.0-flash
 
 async function gemini(prompt: string): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY eksik");
+  if (!apiKey) return "GEMINI_API_KEY tanımlı değil. Vercel ortam değişkenlerini kontrol edin.";
 
   for (const model of GEMINI_MODELS) {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 1024 },
-        }),
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { maxOutputTokens: 1024 },
+          }),
+        }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
       }
-    );
-    if (res.ok) {
-      const data = await res.json();
-      return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+      const err = await res.json().catch(() => ({}));
+      const code = (err as { error?: { code?: number } }).error?.code;
+      if (code !== 503 && code !== 429) break;
+    } catch {
+      continue;
     }
-    const err = await res.json().catch(() => ({}));
-    const code = (err as { error?: { code?: number } }).error?.code;
-    if (code !== 503 && code !== 429) throw new Error(JSON.stringify(err));
   }
-  throw new Error("Tüm Gemini modelleri başarısız");
+  return "AI yanıt veremedi. Lütfen tekrar deneyin.";
 }
 
 export async function POST(req: NextRequest) {
@@ -85,7 +89,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ result });
   } catch (error) {
+    console.error("[ai/analyze]", error);
     const msg = error instanceof Error ? error.message : "Hata";
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json({ result: `Hata: ${msg}` });
   }
 }

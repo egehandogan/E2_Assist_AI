@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, dbSafe } from "@/lib/prisma";
 
 const DEMO_USER_ID = "demo-user";
 
 export async function GET() {
-  try {
-    const notes = await prisma.note.findMany({
+  const notes = await dbSafe(() =>
+    prisma.note.findMany({
       where: { userId: DEMO_USER_ID },
       orderBy: { createdAt: "desc" },
-    });
-    return NextResponse.json(notes);
-  } catch {
-    return NextResponse.json([]);
-  }
+    }),
+    []
+  );
+  return NextResponse.json(notes);
 }
 
 export async function POST(req: NextRequest) {
@@ -24,12 +23,12 @@ export async function POST(req: NextRequest) {
         title: body.title ?? null,
         content: body.content,
         source: body.source ?? "manual",
-        tags: body.tags ? JSON.stringify(body.tags) : null,
+        tags: body.tags ?? null,
       },
     });
     return NextResponse.json(note);
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Not oluşturulamadı" }, { status: 500 });
+    console.error("[notes POST]", e);
+    return NextResponse.json({ error: "DB bağlantı hatası" }, { status: 503 });
   }
 }

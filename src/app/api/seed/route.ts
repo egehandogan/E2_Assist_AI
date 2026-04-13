@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, dbSafe } from "@/lib/prisma";
 
 export async function POST() {
-  try {
-    // Ensure demo user exists
+  const result = await dbSafe(async () => {
     await prisma.user.upsert({
       where: { id: "demo-user" },
       create: {
@@ -13,12 +12,10 @@ export async function POST() {
       },
       update: {},
     });
+    return { ok: true, message: "Demo kullanıcı hazır" };
+  }, { ok: false, message: "DB bağlantısı yok — demo modda çalışıyor" });
 
-    return NextResponse.json({ ok: true, message: "Demo kullanıcı hazır" });
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: String(e) }, { status: 500 });
-  }
+  return NextResponse.json(result);
 }
 
 export async function GET() {

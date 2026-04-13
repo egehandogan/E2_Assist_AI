@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma, dbSafe } from "@/lib/prisma";
 
 const DEMO_USER_ID = "demo-user";
 
 export async function GET() {
-  try {
-    const tasks = await prisma.task.findMany({
+  const tasks = await dbSafe(() =>
+    prisma.task.findMany({
       where: { userId: DEMO_USER_ID },
-      orderBy: [
-        { status: "asc" },
-        { priority: "asc" },
-        { createdAt: "desc" },
-      ],
-    });
-    return NextResponse.json(tasks);
-  } catch {
-    return NextResponse.json([], { status: 200 });
-  }
+      orderBy: [{ status: "asc" }, { priority: "asc" }, { createdAt: "desc" }],
+    }),
+    []
+  );
+  return NextResponse.json(tasks);
 }
 
 export async function POST(req: NextRequest) {
@@ -37,7 +32,7 @@ export async function POST(req: NextRequest) {
     });
     return NextResponse.json(task);
   } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: "Görev oluşturulamadı" }, { status: 500 });
+    console.error("[tasks POST]", e);
+    return NextResponse.json({ error: "DB bağlantı hatası" }, { status: 503 });
   }
 }
