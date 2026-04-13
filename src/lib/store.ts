@@ -215,6 +215,83 @@ export const useMeetingStore = create<MeetingStore>((set) => ({
   },
 }));
 
+// ─── Notifications Store ─────────────────────────────────────────────────────
+
+export interface Notification {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  link?: string | null;
+  isRead: boolean;
+  createdAt: string;
+}
+
+interface NotificationStore {
+  notifications: Notification[];
+  loading: boolean;
+  unreadCount: number;
+  fetch: () => Promise<void>;
+  markRead: (id: string) => Promise<void>;
+  markAllRead: () => Promise<void>;
+  remove: (id: string) => Promise<void>;
+  generate: () => Promise<void>;
+}
+
+export const useNotificationStore = create<NotificationStore>((set, get) => ({
+  notifications: [],
+  loading: false,
+  unreadCount: 0,
+
+  fetch: async () => {
+    set({ loading: true });
+    try {
+      const res = await fetch("/api/notifications");
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : [];
+      set({
+        notifications: list,
+        unreadCount: list.filter((n: Notification) => !n.isRead).length,
+      });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  markRead: async (id) => {
+    await fetch(`/api/notifications/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isRead: true }),
+    });
+    set((s) => {
+      const updated = s.notifications.map((n) => (n.id === id ? { ...n, isRead: true } : n));
+      return { notifications: updated, unreadCount: updated.filter((n) => !n.isRead).length };
+    });
+  },
+
+  markAllRead: async () => {
+    await fetch("/api/notifications/read-all", { method: "POST" });
+    set((s) => ({
+      notifications: s.notifications.map((n) => ({ ...n, isRead: true })),
+      unreadCount: 0,
+    }));
+  },
+
+  remove: async (id) => {
+    await fetch(`/api/notifications/${id}`, { method: "DELETE" });
+    set((s) => {
+      const updated = s.notifications.filter((n) => n.id !== id);
+      return { notifications: updated, unreadCount: updated.filter((n) => !n.isRead).length };
+    });
+  },
+
+  generate: async () => {
+    await fetch("/api/notifications/generate", { method: "POST" });
+    await get().fetch();
+  },
+}));
+
 // ─── AI Helper ────────────────────────────────────────────────────────────────
 
 export async function aiAnalyze(type: string, content: string): Promise<{ result?: string; tasks?: Task[]; error?: string }> {

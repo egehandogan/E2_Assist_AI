@@ -16,61 +16,36 @@ import {
   ChevronLeft,
   ChevronRight,
   Sparkles,
+  Bell,
 } from "lucide-react";
-import { useState } from "react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useState, useEffect } from "react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { useNotificationStore } from "@/lib/store";
 
 const navItems = [
-  {
-    label: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-  },
-  {
-    label: "E-postalar",
-    href: "/dashboard/email",
-    icon: Mail,
-  },
-  {
-    label: "Takvim & Toplantılar",
-    href: "/dashboard/calendar",
-    icon: Calendar,
-  },
-  {
-    label: "Görevler",
-    href: "/dashboard/tasks",
-    icon: CheckSquare,
-  },
-  {
-    label: "AI Asistan",
-    href: "/dashboard/ai",
-    icon: Bot,
-  },
-  {
-    label: "Kütüphane",
-    href: "/dashboard/library",
-    icon: FolderOpen,
-  },
-  {
-    label: "Dokümanlar",
-    href: "/dashboard/documents",
-    icon: FileText,
-  },
-  {
-    label: "Notlar",
-    href: "/dashboard/notes",
-    icon: StickyNote,
-  },
-  {
-    label: "Ayarlar",
-    href: "/dashboard/settings",
-    icon: Settings,
-  },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "E-postalar", href: "/dashboard/email", icon: Mail },
+  { label: "Takvim & Toplantılar", href: "/dashboard/calendar", icon: Calendar },
+  { label: "Görevler", href: "/dashboard/tasks", icon: CheckSquare },
+  { label: "AI Asistan", href: "/dashboard/ai", icon: Bot },
+  { label: "Kütüphane", href: "/dashboard/library", icon: FolderOpen },
+  { label: "Dokümanlar", href: "/dashboard/documents", icon: FileText },
+  { label: "Notlar", href: "/dashboard/notes", icon: StickyNote },
+  { label: "Ayarlar", href: "/dashboard/settings", icon: Settings },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const { unreadCount, fetch: fetchNotifs, generate } = useNotificationStore();
+
+  useEffect(() => {
+    fetchNotifs();
+    generate();
+    // Poll every 5 minutes
+    const interval = setInterval(() => { fetchNotifs(); }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [fetchNotifs, generate]);
 
   return (
     <aside
@@ -94,6 +69,35 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
+        {/* Notification link */}
+        <Link
+          href="/dashboard/notifications"
+          className={cn(
+            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
+            pathname === "/dashboard/notifications"
+              ? "bg-violet-600 text-white"
+              : "text-gray-400 hover:bg-gray-800 hover:text-white"
+          )}
+          title={collapsed ? "Bildirimler" : undefined}
+        >
+          <div className="relative flex-shrink-0">
+            <Bell className="w-5 h-5" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 flex items-center justify-center bg-red-500 text-white text-[10px] font-bold rounded-full px-1">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </div>
+          {!collapsed && <span className="truncate">Bildirimler</span>}
+          {!collapsed && unreadCount > 0 && (
+            <span className="ml-auto text-xs bg-red-500 text-white rounded-full px-1.5 py-0.5 font-bold">
+              {unreadCount}
+            </span>
+          )}
+        </Link>
+
+        <div className="border-t border-gray-700 my-2" />
+
         {navItems.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
           return (
