@@ -93,13 +93,14 @@ export default function TasksPage() {
     setAiLoading(true);
     const result = await aiAnalyze("extract_tasks", aiText);
     if (result.tasks) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setAiTasks(
-        result.tasks.map((t: { title?: string; assignee?: string; priority?: string; dueDate?: string }) => ({
-          title: t.title ?? "",
+        result.tasks.map((t: any) => ({
+          title: String(t.title ?? ""),
           description: "",
-          assignee: t.assignee ?? "",
-          dueDate: t.dueDate ?? "",
-          priority: (["urgent", "high", "medium", "low"].includes(t.priority ?? "") ? t.priority : "medium") as NewTaskForm["priority"],
+          assignee: String(t.assignee ?? ""),
+          dueDate: String(t.dueDate ?? ""),
+          priority: (["urgent", "high", "medium", "low"].includes(t.priority) ? t.priority : "medium") as NewTaskForm["priority"],
           category: "",
         }))
       );
