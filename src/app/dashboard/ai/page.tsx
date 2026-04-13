@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-type AIModel = "auto" | "claude" | "haiku" | "gemini" | "openai";
+type AIModel = "auto" | "flash" | "pro";
 
 interface RouteInfo {
   model: string;
@@ -35,32 +35,20 @@ const modelConfig: Record<AIModel, { name: string; icon: string; color: string; 
   auto: {
     name: "Otomatik",
     icon: "✨",
-    color: "bg-amber-100 text-amber-700",
-    description: "Göreve göre en uygun model",
+    color: "bg-blue-100 text-blue-700",
+    description: "Göreve göre Flash veya Pro seçer",
   },
-  claude: {
-    name: "Sonnet 4.6",
-    icon: "🟣",
-    color: "bg-violet-100 text-violet-700",
-    description: "Karmaşık analiz ve yazarlık",
-  },
-  haiku: {
-    name: "Haiku 4.5",
-    icon: "⚡",
-    color: "bg-purple-100 text-purple-700",
-    description: "Hızlı ve ekonomik",
-  },
-  gemini: {
+  flash: {
     name: "Gemini Flash",
+    icon: "⚡",
+    color: "bg-cyan-100 text-cyan-700",
+    description: "Hızlı yanıt, ücretsiz",
+  },
+  pro: {
+    name: "Gemini Pro",
     icon: "🔵",
     color: "bg-blue-100 text-blue-700",
-    description: "İnternet araması (ücretsiz)",
-  },
-  openai: {
-    name: "GPT-4o mini",
-    icon: "⚫",
-    color: "bg-gray-100 text-gray-700",
-    description: "Yedek model",
+    description: "Derin analiz, karmaşık görevler",
   },
 };
 
@@ -192,19 +180,13 @@ export default function AIPage() {
           ))}
         </div>
 
-        {/* Cost indicator */}
+        {/* Free badge */}
         <div className="p-3 border-t border-gray-700">
-          <div className="bg-gray-800 rounded-lg p-2.5">
-            <p className="text-xs text-gray-400 mb-1">Bu oturum</p>
-            <p className="text-xs text-green-400 font-medium">
-              ~{messages.filter(m => m.role === "assistant").reduce((acc, m) => {
-                return acc + (m.usage?.outputTokens ?? 0);
-              }, 0)} token
-            </p>
-            <p className="text-xs text-gray-500 mt-0.5">
-              ≈ ${(messages.filter(m => m.role === "assistant").reduce((acc, m) => {
-                return acc + (m.usage?.outputTokens ?? 0);
-              }, 0) * 0.000004).toFixed(5)}
+          <div className="bg-gray-800 rounded-lg p-2.5 text-center">
+            <p className="text-xs text-green-400 font-medium">✅ Tamamen Ücretsiz</p>
+            <p className="text-xs text-gray-500 mt-0.5">Google Gemini API</p>
+            <p className="text-xs text-gray-600 mt-1">
+              {messages.filter(m => m.role === "assistant").length} yanıt
             </p>
           </div>
         </div>
@@ -253,25 +235,28 @@ export default function AIPage() {
               {showModelSelect && (
                 <div className="absolute right-0 top-full mt-1 w-60 bg-white rounded-xl border border-gray-100 shadow-xl z-10 overflow-hidden">
                   <div className="p-2 border-b border-gray-100">
-                    <p className="text-xs text-gray-400 px-2">Model Seç</p>
+                    <p className="text-xs text-gray-400 px-2">Model Seç (Tümü Ücretsiz)</p>
                   </div>
-                  {(Object.entries(modelConfig) as [AIModel, typeof modelConfig.auto][]).map(([key, cfg]) => (
-                    <button
-                      key={key}
-                      onClick={() => { setModel(key); setShowModelSelect(false); }}
-                      className={cn(
-                        "w-full flex items-start gap-3 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left",
-                        model === key && "bg-violet-50"
-                      )}
-                    >
-                      <span className="text-base">{cfg.icon}</span>
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{cfg.name}</p>
-                        <p className="text-xs text-gray-400">{cfg.description}</p>
-                      </div>
-                      {model === key && <span className="text-violet-500 text-xs">✓</span>}
-                    </button>
-                  ))}
+                  {(["auto", "flash", "pro"] as AIModel[]).map((key) => {
+                    const cfg = modelConfig[key];
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => { setModel(key); setShowModelSelect(false); }}
+                        className={cn(
+                          "w-full flex items-start gap-3 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left",
+                          model === key && "bg-blue-50"
+                        )}
+                      >
+                        <span className="text-base">{cfg.icon}</span>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-900">{cfg.name}</p>
+                          <p className="text-xs text-gray-400">{cfg.description}</p>
+                        </div>
+                        {model === key && <span className="text-blue-500 text-xs">✓</span>}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -438,9 +423,9 @@ export default function AIPage() {
             </div>
             <p className="text-xs text-gray-400 text-center mt-1.5">
               {model === "auto"
-                ? "✨ Otomatik model seçimi aktif — göreve göre en ucuz model kullanılır"
+                ? "✨ Otomatik — basit sorular Flash, karmaşık analizler Pro"
                 : `${selectedModel.icon} ${selectedModel.name} seçili`}
-              {webSearch && " · 🌐 İnternet araması açık (Gemini)"}
+              {webSearch && " · 🌐 Google Search Grounding aktif"}
             </p>
           </div>
         </div>

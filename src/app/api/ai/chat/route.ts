@@ -13,34 +13,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Mesaj gerekli" }, { status: 400 });
     }
 
-    // Check at least one AI key is configured
-    const hasAnyKey =
-      process.env.ANTHROPIC_API_KEY ||
-      process.env.GEMINI_API_KEY ||
-      process.env.OPENAI_API_KEY;
-
-    if (!hasAnyKey) {
+    if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json({
         content:
-          "⚠️ Henüz bir AI API anahtarı yapılandırılmamış.\n\n" +
-          "Lütfen Vercel'de şu environment variable'lardan en az birini ekleyin:\n" +
-          "• `ANTHROPIC_API_KEY` (önerilen — Claude Haiku/Sonnet)\n" +
-          "• `GEMINI_API_KEY` (ücretsiz — Gemini Flash)\n" +
-          "• `OPENAI_API_KEY` (yedek — GPT-4o mini)",
+          "⚠️ Gemini API anahtarı yapılandırılmamış.\n\n" +
+          "Vercel → Settings → Environment Variables bölümüne `GEMINI_API_KEY` ekleyin.",
         model: "none",
         modelName: "Yapılandırılmadı",
         route: null,
       });
     }
 
-    // Detect task type from the last user message
+    // Map UI model names to internal model IDs
+    const modelMap: Record<string, string> = {
+      auto: "auto",
+      flash: "gemini-flash",
+      pro: "gemini-pro",
+    };
+    const mappedModel = modelMap[model] ?? "auto";
+
     const lastUserMessage =
       [...messages].reverse().find((m: { role: string }) => m.role === "user")?.content ?? "";
 
     const taskType = detectTaskType(lastUserMessage);
-    const route = routeToModel(taskType, model, webSearch);
+    const route = routeToModel(taskType, mappedModel, webSearch);
 
-    // Call the selected AI model (with automatic fallback)
     const response = await callAI(
       messages,
       route.model,
@@ -58,7 +55,7 @@ export async function POST(req: NextRequest) {
         model: route.model,
         reason: route.reason,
         maxTokens: route.maxTokens,
-        cached: route.useCache,
+        cached: false,
       },
       usage: {
         inputTokens: response.inputTokens,
@@ -67,15 +64,11 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error("AI chat error:", error);
-    const message =
-      error instanceof Error ? error.message : "Bilinmeyen hata";
-    return NextResponse.json(
-      {
-        content: `Bir hata oluştu: ${message}`,
-        model: "error",
-        modelName: "Hata",
-      },
-      { status: 200 } // Return 200 so frontend can show the error message
-    );
+    const message = error instanceof Error ? error.message : "Bilinmeyen hata";
+    return NextResponse.json({
+      content: `Bir hata oluştu: ${message}`,
+      model: "error",
+      modelName: "Hata",
+    });
   }
 }
