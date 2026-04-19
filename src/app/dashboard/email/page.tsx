@@ -46,6 +46,8 @@ export default function EmailPage() {
   const [aiPanel, setAiPanel] = useState<AIPanel>({ loading: false, summary: null, reply: null, research: null });
   const [activeAI, setActiveAI] = useState<"summary" | "reply" | "research" | null>(null);
 
+  const [apiError, setApiError] = useState<string | null>(null);
+
   useEffect(() => {
     fetchEmails();
   }, []);
@@ -53,13 +55,17 @@ export default function EmailPage() {
   const fetchEmails = async () => {
     try {
       setLoading(true);
+      setApiError(null);
       const res = await fetch("/api/email");
-      if (res.ok) {
-        const data = await res.json();
+      const data = await res.json();
+      if (res.ok && Array.isArray(data)) {
         setEmails(data);
+      } else {
+        setApiError(data.error || "E-postalar alınamadı.");
       }
     } catch (e) {
       console.error(e);
+      setApiError("Bağlantı hatası");
     } finally {
       setLoading(false);
     }
@@ -215,6 +221,11 @@ export default function EmailPage() {
             {loading ? (
               <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-10 text-violet-600">
                 <Loader2 className="w-6 h-6 animate-spin" />
+              </div>
+            ) : apiError ? (
+              <div className="flex flex-col items-center justify-center p-8 text-red-400">
+                <span className="text-sm font-medium mb-1">Erişim İzni Gerekiyor</span>
+                <span className="text-xs text-center">{apiError}</span>
               </div>
             ) : filteredEmails.length === 0 ? (
               <div className="flex flex-col items-center justify-center p-8 text-gray-400">

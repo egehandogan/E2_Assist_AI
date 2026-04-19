@@ -1,3 +1,6 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import { DashboardStats } from "@/components/dashboard/DashboardStats";
 import { RecentEmails } from "@/components/dashboard/RecentEmails";
@@ -7,6 +10,18 @@ import { QuickNote } from "@/components/dashboard/QuickNote";
 import { AIWidget } from "@/components/dashboard/AIWidget";
 
 export default function DashboardPage() {
+  const [user, setUser] = useState<{ name: string; email: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/user/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.error) {
+          setUser(data);
+        }
+      });
+  }, []);
+
   const today = new Date().toLocaleDateString("tr-TR", {
     weekday: "long",
     day: "numeric",
@@ -17,7 +32,7 @@ export default function DashboardPage() {
   return (
     <div className="flex flex-col min-h-full">
       <TopBar
-        title="Günaydın, Nurevşan 👋"
+        title={`Günaydın, ${user?.name?.split(" ")[0] || "Yükleniyor..."} 👋`}
         subtitle={today}
       />
 
