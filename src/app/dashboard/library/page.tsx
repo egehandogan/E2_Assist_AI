@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import {
   FolderOpen, Upload, Search, Grid, List, Image, FileText,
@@ -23,78 +23,8 @@ interface LibraryItem {
   thumbnail?: string;
   description?: string;
   isStarred?: boolean;
+  url?: string;
 }
-
-const mockItems: LibraryItem[] = [
-  {
-    id: "1",
-    name: "Etkinlik Fotoğrafları",
-    type: "folder",
-    date: "10 Nisan 2024",
-    description: "15 Nisan etkinliğinden fotoğraflar",
-  },
-  {
-    id: "2",
-    name: "Ahmet_Kartvizit.jpg",
-    type: "card",
-    size: "245 KB",
-    date: "12 Nisan 2024",
-    tags: ["kartvizit", "iş"],
-    description: "Ahmet Yılmaz - Belediye Müdürü. Tel: 0532 xxx xxxx",
-    isStarred: true,
-  },
-  {
-    id: "3",
-    name: "Sponsor_Anlasma.pdf",
-    type: "pdf",
-    size: "1.2 MB",
-    date: "8 Nisan 2024",
-    tags: ["sözleşme", "sponsorluk"],
-    isStarred: false,
-  },
-  {
-    id: "4",
-    name: "Etkinlik_Afis.png",
-    type: "image",
-    size: "3.5 MB",
-    date: "5 Nisan 2024",
-    tags: ["etkinlik", "tasarım"],
-  },
-  {
-    id: "5",
-    name: "Fatma_Kartvizit.jpg",
-    type: "card",
-    size: "180 KB",
-    date: "3 Nisan 2024",
-    tags: ["kartvizit"],
-    description: "Fatma Kara - Medya İlişkileri. TV Kanalı İletişim Müdürü",
-  },
-  {
-    id: "6",
-    name: "Butce_2024.xlsx",
-    type: "document",
-    size: "524 KB",
-    date: "1 Nisan 2024",
-    tags: ["mali", "bütçe"],
-  },
-  {
-    id: "7",
-    name: "Yonetim_Kurulu_Karari.docx",
-    type: "document",
-    size: "89 KB",
-    date: "28 Mart 2024",
-    tags: ["karar", "resmi"],
-    isStarred: true,
-  },
-  {
-    id: "8",
-    name: "Dernek_Toplantisi.jpg",
-    type: "image",
-    size: "4.1 MB",
-    date: "25 Mart 2024",
-    tags: ["toplantı", "fotoğraf"],
-  },
-];
 
 const typeConfig = {
   image: { icon: Image, color: "text-blue-500", bg: "bg-blue-50", label: "Görsel" },
@@ -113,8 +43,44 @@ export default function LibraryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedItem, setSelectedItem] = useState<LibraryItem | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [items, setItems] = useState<LibraryItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filteredItems = mockItems.filter((item) => {
+  useEffect(() => {
+    fetchItems();
+  }, []);
+
+  const fetchItems = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/drive");
+      if (res.ok) {
+        setItems(await res.json());
+      }
+    } catch {} finally {
+      setLoading(false);
+    }
+  };
+
+  const createFolder = async () => {
+    const name = prompt("Yeni klasör adı:");
+    if (!name) return;
+    try {
+      const res = await fetch("/api/drive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "create_folder", name, parentId: "root" })
+      });
+      if (res.ok) {
+        fetchItems();
+        alert("Klasör oluşturuldu");
+      }
+    } catch {
+      alert("Hata oluştu");
+    }
+  };
+
+  const filteredItems = items.filter((item) => {
     if (filter !== "all" && item.type !== filter) return false;
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
@@ -128,10 +94,10 @@ export default function LibraryPage() {
   });
 
   const stats = {
-    total: mockItems.length,
-    images: mockItems.filter((i) => i.type === "image").length,
-    documents: mockItems.filter((i) => i.type === "document" || i.type === "pdf").length,
-    cards: mockItems.filter((i) => i.type === "card").length,
+    total: items.length,
+    images: items.filter((i) => i.type === "image").length,
+    documents: items.filter((i) => i.type === "document" || i.type === "pdf").length,
+    cards: items.filter((i) => i.type === "card").length,
   };
 
   return (
@@ -206,9 +172,9 @@ export default function LibraryPage() {
                 </button>
               </div>
 
-              <Button size="sm" className="gap-1.5">
-                <Upload className="w-4 h-4" />
-                Yükle
+              <Button size="sm" className="gap-1.5" onClick={createFolder}>
+                <Plus className="w-4 h-4" />
+                Klasör Ekle
               </Button>
               <Button size="sm" variant="outline" className="gap-1.5">
                 <Camera className="w-4 h-4" />
@@ -374,7 +340,7 @@ export default function LibraryPage() {
                       </div>
                     )}
                     <div className="space-y-2 pt-2 border-t border-gray-100">
-                      <Button size="sm" className="w-full gap-2">
+                      <Button size="sm" className="w-full gap-2" onClick={() => window.open(selectedItem.url, "_blank")}>
                         <Eye className="w-4 h-4" /> Görüntüle
                       </Button>
                       <Button size="sm" variant="outline" className="w-full gap-2">

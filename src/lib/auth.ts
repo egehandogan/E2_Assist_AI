@@ -1,40 +1,24 @@
-import NextAuth from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
-import { PrismaAdapter } from "@auth/prisma-adapter";
-import { prisma } from "./prisma";
+import { cookies } from "next/headers";
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
-  providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-      authorization: {
-        params: {
-          scope: [
-            "openid",
-            "email",
-            "profile",
-            "https://www.googleapis.com/auth/gmail.readonly",
-            "https://www.googleapis.com/auth/gmail.send",
-            "https://www.googleapis.com/auth/calendar",
-            "https://www.googleapis.com/auth/drive",
-          ].join(" "),
-          access_type: "offline",
-          prompt: "consent",
-        },
-      },
-    }),
-  ],
-  callbacks: {
-    async session({ session, user }) {
-      if (session.user) {
-        session.user.id = user.id;
+export async function auth() {
+  const cookieStore = await cookies();
+  const firebaseId = cookieStore.get("firebase-session")?.value;
+  
+  if (firebaseId) {
+    return {
+      user: {
+        id: firebaseId
       }
-      return session;
-    },
-  },
-  pages: {
-    signIn: "/login",
-  },
-});
+    };
+  }
+  
+  return null;
+}
+
+export function signIn() {
+  // Mock function if any code still uses it
+}
+
+export function signOut() {
+  // Mock function if any code still uses it
+}

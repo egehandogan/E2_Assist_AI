@@ -79,6 +79,13 @@ const taskTypeLabels: Record<string, string> = {
   task_extraction: "Görev çıkarma",
 };
 
+interface ChatSessionItem {
+  id: string;
+  title: string;
+  createdAt: string;
+  model: string;
+}
+
 export default function AIPage() {
   const [model, setModel] = useState<AIModel>("auto");
   const [messages, setMessages] = useState<Message[]>([]);
@@ -86,11 +93,41 @@ export default function AIPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [webSearch, setWebSearch] = useState(false);
   const [showModelSelect, setShowModelSelect] = useState(false);
+  const [sessions, setSessions] = useState<ChatSessionItem[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const fetchSessions = async () => {
+    try {
+      const res = await fetch("/api/ai/sessions");
+      if (res.ok) setSessions(await res.json());
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    fetchSessions();
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  const handleSelectSession = async (id: string) => {
+    try {
+      setActiveSessionId(id);
+      setMessages([]);
+      const res = await fetch(`/api/ai/sessions/${id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data.messages);
+      }
+    } catch (e) {}
+  };
+
+  const handleNewSession = () => {
+    setActiveSessionId(null);
+    setMessages([]);
+  };
 
   const sendMessage = async (overrideInput?: string) => {
     const text = overrideInput ?? input;
@@ -108,6 +145,7 @@ export default function AIPage() {
     setIsLoading(true);
 
     try {
+      const isNewSession = !activeSessionId;
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -118,6 +156,7 @@ export default function AIPage() {
           })),
           model,
           webSearch,
+          sessionId: activeSessionId,
         }),
       });
 
@@ -131,10 +170,15 @@ export default function AIPage() {
         taskType: data.taskType,
         route: data.route,
         usage: data.usage,
-        timestamp: new Date(),
+        timestamp: new Date(data.timestamp || Date.now()),
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
+      
+      if (data.sessionId && isNewSession) {
+        setActiveSessionId(data.sessionId);
+        fetchSessions(); // refresh the history list in sidebar
+      }
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -160,7 +204,7 @@ export default function AIPage() {
           <Button
             className="w-full gap-2 bg-violet-600 hover:bg-violet-700 text-xs"
             size="sm"
-            onClick={() => setMessages([])}
+            onClick={handleNewSession}
           >
             <Plus className="w-3.5 h-3.5" />
             Yeni Sohbet
@@ -169,13 +213,19 @@ export default function AIPage() {
 
         <div className="flex-1 overflow-y-auto p-2">
           <p className="text-xs text-gray-500 px-2 mb-2 mt-1">Geçmiş</p>
-          {mockHistory.map((h) => (
+          {sessions.map((h) => (
             <button
               key={h.id}
-              className="w-full text-left px-3 py-2 rounded-lg text-xs text-gray-400 hover:bg-gray-800 hover:text-white transition-colors mb-0.5"
+              onClick={() => handleSelectSession(h.id)}
+              className={cn(
+                "w-full text-left px-3 py-2 rounded-lg text-xs hover:bg-gray-800 transition-colors mb-0.5",
+                activeSessionId === h.id ? "bg-gray-800 text-white" : "text-gray-400 hover:text-white"
+              )}
             >
-              <p className="font-medium truncate">{h.title}</p>
-              <p className="text-gray-500 text-xs mt-0.5">{h.date}</p>
+              <p className="font-medium truncate">{h.title || "İsimsiz Sohbet"}</p>
+              <p className="text-gray-500 text-xs mt-0.5">
+                {new Date(h.createdAt).toLocaleDateString("tr-TR", { day: "numeric", month: "short" })}
+              </p>
             </button>
           ))}
         </div>

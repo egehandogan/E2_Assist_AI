@@ -29,12 +29,13 @@ export function proxy(request: NextRequest) {
   );
 
   if (isProtected) {
-    // Check for NextAuth session cookie or demo session
+    // Check for NextAuth session cookie or demo session or new Firebase session
     const authCookie =
       request.cookies.get("authjs.session-token") ??
       request.cookies.get("__Secure-authjs.session-token") ??
       request.cookies.get("next-auth.session-token") ??
-      request.cookies.get("__Secure-next-auth.session-token");
+      request.cookies.get("__Secure-next-auth.session-token") ??
+      request.cookies.get("firebase-session");
 
     const demoSession = request.cookies.get("demo-session");
 

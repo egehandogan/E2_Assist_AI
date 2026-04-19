@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import {
-  Mail, Star, Search, Archive, Trash2, Reply,
+  Mail, Star, Search, Archive, Reply,
   Inbox, Send, Bot, Plus, Loader2, Sparkles, BookOpen
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,65 +13,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { aiAnalyze } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
-const accounts = [
-  { id: "1", email: "nurevsan@gmail.com", label: "Kişisel", color: "bg-blue-500", unread: 8 },
-  { id: "2", email: "dernek@gmail.com", label: "Dernek", color: "bg-green-500", unread: 4 },
-];
-
-const mockEmails = [
-  {
-    id: "1",
-    from: "Ahmet Yılmaz",
-    fromEmail: "ahmet@dernek.org",
-    subject: "Mayıs Ayı Genel Kurul Gündemi",
-    body: `Sayın Başkanım,\n\nMayıs ayı genel kurul toplantısı için gündem maddelerini aşağıda belirtmek istedim:\n\n1. Faaliyet raporu sunumu\n2. Mali rapor ve bütçe onayı\n3. Yeni proje teklifleri\n4. Seçim (gerektiğinde)\n\nSaygılarımla,\nAhmet Yılmaz`,
-    time: "09:32",
-    date: "Bugün",
-    isRead: false,
-    isStarred: true,
-    account: "nurevsan@gmail.com",
-    labels: ["Önemli"],
-  },
-  {
-    id: "2",
-    from: "Belediye İletişim",
-    fromEmail: "iletisim@belediye.gov.tr",
-    subject: "Etkinlik İzin Başvurusu - Onay",
-    body: `Sayın Nurevşan Hanım,\n\n15 Mayıs 2024 tarihli etkinlik başvurunuz onaylanmıştır. İzin belgesi ekte sunulmuştur.\n\nSaygılarımızla,\nBelediye Etkinlik Birimi`,
-    time: "08:15",
-    date: "Bugün",
-    isRead: false,
-    isStarred: false,
-    account: "nurevsan@gmail.com",
-    labels: ["Resmi"],
-  },
-  {
-    id: "3",
-    from: "Fatma Demir",
-    fromEmail: "fatma.demir@mail.com",
-    subject: "Bağış Kampanyası Hakkında",
-    body: `Merhaba,\n\nKampanyânıza katılmak istiyorum. Lütfen banka hesap bilgilerini paylaşır mısınız?`,
-    time: "16:45",
-    date: "Dün",
-    isRead: true,
-    isStarred: false,
-    account: "dernek@gmail.com",
-    labels: [],
-  },
-  {
-    id: "4",
-    from: "Sponsorluk Teklifi",
-    fromEmail: "info@abcfirm.com",
-    subject: "İşbirliği Teklifi - Yıllık Sponsorluk",
-    body: `Sayın Nurevşan Doğan,\n\nDerneğinize yıllık 100.000 TL sponsorluk sağlamayı düşünüyoruz. Karşılığında etkinliklerimizde logo ve banner gösterimi talep ediyoruz.\n\nDetayları görüşmek üzere toplantı ayarlayabilir miyiz?\n\nSaygılarımla,\nAhmet Çelik\nABC Firması İletişim Direktörü`,
-    time: "11:00",
-    date: "Dün",
-    isRead: true,
-    isStarred: true,
-    account: "dernek@gmail.com",
-    labels: ["Sponsorluk", "Önemli"],
-  },
-];
+type EmailItem = {
+  id: string;
+  from: string;
+  fromEmail: string;
+  subject: string;
+  body: string;
+  time: string;
+  date: string;
+  isRead: boolean;
+  isStarred: boolean;
+  account: string;
+  labels: string[];
+  threadId?: string;
+};
 
 interface AIPanel {
   loading: boolean;
@@ -82,12 +37,33 @@ interface AIPanel {
 
 export default function EmailPage() {
   const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
-  const [selectedEmail, setSelectedEmail] = useState<typeof mockEmails[0] | null>(null);
-  const [emails, setEmails] = useState(mockEmails);
+  const [selectedEmail, setSelectedEmail] = useState<EmailItem | null>(null);
+  const [emails, setEmails] = useState<EmailItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sendingReply, setSendingReply] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [replyText, setReplyText] = useState("");
   const [aiPanel, setAiPanel] = useState<AIPanel>({ loading: false, summary: null, reply: null, research: null });
   const [activeAI, setActiveAI] = useState<"summary" | "reply" | "research" | null>(null);
+
+  useEffect(() => {
+    fetchEmails();
+  }, []);
+
+  const fetchEmails = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch("/api/email");
+      if (res.ok) {
+        const data = await res.json();
+        setEmails(data);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredEmails = emails.filter((e) => {
     if (selectedAccount && e.account !== selectedAccount) return false;
@@ -102,7 +78,15 @@ export default function EmailPage() {
     return true;
   });
 
-  const handleSelectEmail = (email: typeof mockEmails[0]) => {
+  // Extract unique accounts
+  const accounts = Array.from(new Set(emails.map((e) => e.account))).map((email, idx) => ({
+    id: idx.toString(),
+    email,
+    label: email,
+    color: idx % 2 === 0 ? "bg-blue-500" : "bg-green-500"
+  }));
+
+  const handleSelectEmail = (email: EmailItem) => {
     setSelectedEmail(email);
     setActiveAI(null);
     setAiPanel({ loading: false, summary: null, reply: null, research: null });
@@ -123,7 +107,6 @@ export default function EmailPage() {
     if (!selectedEmail) return;
     if (activeAI === type) { setActiveAI(null); return; }
     setActiveAI(type);
-    // Use cached result if available
     if (aiPanel[type]) return;
     setAiPanel((p) => ({ ...p, loading: true }));
     const analyzeType = type === "summary" ? "email_summary" : type === "reply" ? "email_reply" : "email_research";
@@ -134,6 +117,33 @@ export default function EmailPage() {
   const handleUseReply = () => {
     if (aiPanel.reply) setReplyText(aiPanel.reply);
     setActiveAI(null);
+  };
+
+  const handleSendReply = async () => {
+    if (!selectedEmail || !replyText.trim()) return;
+    setSendingReply(true);
+    try {
+      const res = await fetch("/api/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: selectedEmail.fromEmail,
+          subject: `Re: ${selectedEmail.subject}`,
+          body: replyText,
+          threadId: selectedEmail.threadId,
+        })
+      });
+      if (res.ok) {
+        setReplyText("");
+        alert("Yanıt başarıyla gönderildi.");
+      } else {
+        alert("Hata oluştu.");
+      }
+    } catch {
+      alert("Hata oluştu.");
+    } finally {
+      setSendingReply(false);
+    }
   };
 
   return (
@@ -201,7 +211,17 @@ export default function EmailPage() {
           </div>
 
           {/* Email list */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto relative">
+            {loading ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-white/50 z-10 text-violet-600">
+                <Loader2 className="w-6 h-6 animate-spin" />
+              </div>
+            ) : filteredEmails.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-gray-400">
+                <Inbox className="w-8 h-8 opacity-50 mb-2" />
+                <span className="text-sm">E-posta bulunamadı</span>
+              </div>
+            ) : null}
             {filteredEmails.map((email) => (
               <div
                 key={email.id}
@@ -243,9 +263,6 @@ export default function EmailPage() {
                 </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8">
                   <Archive className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <Trash2 className="w-4 h-4 text-red-500" />
                 </Button>
                 <Button
                   variant="ghost"
@@ -365,8 +382,8 @@ export default function EmailPage() {
                       <Bot className="w-3.5 h-3.5" />
                       AI ile yanıt öner
                     </Button>
-                    <Button size="sm" className="gap-1.5">
-                      <Send className="w-3.5 h-3.5" />
+                    <Button size="sm" className="gap-1.5" onClick={handleSendReply} disabled={sendingReply}>
+                      {sendingReply ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                       Gönder
                     </Button>
                   </div>

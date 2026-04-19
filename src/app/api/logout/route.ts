@@ -13,6 +13,19 @@ export async function POST() {
     maxAge: 0, // Expire immediately
   });
 
+  // Clear firebase session cookie
+  cookieStore.set("firebase-session", "", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
+
+  // Clear leftover NextAuth cookies
+  cookieStore.set("next-auth.session-token", "", { maxAge: 0, path: "/" });
+  cookieStore.set("__Secure-next-auth.session-token", "", { maxAge: 0, path: "/" });
+
   return NextResponse.json({ ok: true });
 }
 

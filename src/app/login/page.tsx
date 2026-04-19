@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   Bot,
   Mail,
@@ -78,18 +78,51 @@ export default function LoginPage() {
   const [demoLoading, setDemoLoading] = useState(false);
   const [activeFeature, setActiveFeature] = useState(0);
 
-  // Rotate the feature highlight every 3 seconds
-  useState(() => {
+  useEffect(() => {
     const timer = setInterval(() => {
       setActiveFeature((prev) => (prev + 1) % features.length);
     }, 3000);
     return () => clearInterval(timer);
-  });
+  }, []);
 
-  // Google OAuth sign-in
-  const handleGoogleSignIn = () => {
+  // Firebase Google Sign In
+  const handleGoogleSignIn = async () => {
     setLoading(true);
-    window.location.href = "/api/auth/signin/google";
+    try {
+      const { auth, googleProvider } = await import("@/lib/firebase");
+      const { signInWithPopup, GoogleAuthProvider } = await import("firebase/auth");
+      
+      const result = await signInWithPopup(auth, googleProvider);
+      
+      // Get the Google API Access Token and Firebase ID Token
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const accessToken = credential?.accessToken; // Needs to be passed to backend!
+      const idToken = await result.user.getIdToken();
+
+      const response = await fetch("/api/auth/firebase", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          accessToken,
+          email: result.user.email,
+          uid: result.user.uid,
+          name: result.user.displayName,
+          image: result.user.photoURL,
+        }),
+      });
+
+      if (response.ok) {
+        window.location.href = "/dashboard";
+      } else {
+        throw new Error("Backend verification failed");
+      }
+    } catch (error) {
+      console.error(error);
+      setLoading(false);
+    }
   };
 
   // Demo mode — creates demo user and enters dashboard
