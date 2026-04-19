@@ -18,6 +18,7 @@ import {
   Bell,
   Menu,
   X,
+  LogOut,
 } from "lucide-react";
 import Image from "next/image";
 import { useState, useEffect } from "react";
@@ -50,6 +51,13 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const { unreadCount, fetch: fetchNotifs, generate } = useNotificationStore();
+
+  const handleLogout = async () => {
+    // Clear demo session
+    await fetch("/api/logout", { method: "POST" }).catch(() => {});
+    // Hard redirect to ensure cookies are fully processed
+    window.location.href = "/login";
+  };
 
   useEffect(() => {
     fetchNotifs();
@@ -200,7 +208,25 @@ export function Sidebar() {
                 <p className="text-xs font-medium text-white truncate">Nurevşan Doğan</p>
                 <p className="text-xs text-gray-400 truncate">Dernek Başkanı</p>
               </div>
+              <button
+                onClick={handleLogout}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-gray-800 transition-colors"
+                title="Çıkış Yap"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
+          </div>
+        )}
+        {collapsed && (
+          <div className="px-2 py-3 border-t border-gray-700 flex justify-center">
+            <button
+              onClick={handleLogout}
+              className="p-2 rounded-lg text-gray-400 hover:text-red-400 hover:bg-gray-800 transition-colors"
+              title="Çıkış Yap"
+            >
+              <LogOut className="w-4.5 h-4.5" />
+            </button>
           </div>
         )}
 
@@ -242,6 +268,13 @@ export function Sidebar() {
                   <p className="text-xs font-medium text-white truncate">Nurevşan Doğan</p>
                   <p className="text-xs text-gray-400 truncate">Dernek Başkanı</p>
                 </div>
+                <button
+                  onClick={handleLogout}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-400 hover:bg-gray-800 transition-colors"
+                  title="Çıkış Yap"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
               </div>
             </div>
           </aside>
