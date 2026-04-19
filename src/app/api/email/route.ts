@@ -60,7 +60,7 @@ export async function GET(req: Request) {
 
         const headers = detail.data.payload?.headers || [];
         const getHeader = (name: string) =>
-          headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
+          headers.find((h) => h.name?.toLowerCase() === name.toLowerCase())?.value || "";
 
         const subject = getHeader("subject") || "(Konu Yok)";
         const fromHeader = getHeader("from");
