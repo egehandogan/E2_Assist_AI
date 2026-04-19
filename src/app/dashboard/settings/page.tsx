@@ -1,27 +1,38 @@
 "use client";
 
+import { useState, useEffect } from "react";
+
 import { TopBar } from "@/components/layout/TopBar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
-  Settings, Mail, Calendar, Bot, Key, Plus, Trash2,
+  Settings, Mail, Calendar, Bot, Key,
   CheckCircle, XCircle, Globe
 } from "lucide-react";
 
-const gmailAccounts = [
-  { email: "nurevsan@gmail.com", label: "Kişisel", status: "connected" },
-  { email: "dernek@gmail.com", label: "Dernek", status: "connected" },
-];
+
 
 const aiModels = [
-  { name: "Claude (Anthropic)", key: "ANTHROPIC_API_KEY", status: "configured", icon: "🟣" },
+  { name: "Gemini Pro (Google)", key: "GEMINI_API_KEY", status: "configured", icon: "🔵" },
+  { name: "Claude (Anthropic)", key: "ANTHROPIC_API_KEY", status: "not_configured", icon: "🟣" },
   { name: "GPT-4 (OpenAI)", key: "OPENAI_API_KEY", status: "not_configured", icon: "⚫" },
-  { name: "Gemini (Google)", key: "GEMINI_API_KEY", status: "not_configured", icon: "🔵" },
 ];
 
 export default function SettingsPage() {
+  const [user, setUser] = useState<{ name: string; email: string; image?: string } | null>(null);
+
+  useEffect(() => {
+    fetch("/api/user/me")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.error) {
+          setUser(data);
+        }
+      });
+  }, []);
+
   return (
     <div className="flex flex-col h-full">
       <TopBar title="Ayarlar" subtitle="Platform yapılandırması" />
@@ -39,14 +50,14 @@ export default function SettingsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1.5 block">Ad Soyad</label>
-                <Input defaultValue="Nurevşan Doğan" />
+                <Input value={user?.name || "Yükleniyor..."} readOnly className="bg-gray-50 text-gray-500 cursor-not-allowed" />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Unvan</label>
-                <Input defaultValue="Dernek Başkanı" />
+                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Unvan (Otomatik)</label>
+                <Input value="Dernek Temsilcisi" readOnly className="bg-gray-50 text-gray-500 cursor-not-allowed" />
               </div>
             </div>
-            <Button size="sm">Kaydet</Button>
+            <p className="text-xs text-amber-600 font-medium">Not: Profil bilgileri Google Hesabınızdan senkronize edilir.</p>
           </CardContent>
         </Card>
 
@@ -55,34 +66,26 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Mail className="w-4 h-4" />
-              Gmail Hesapları
+              Aktif Google Bağlantısı
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {gmailAccounts.map((acc) => (
-              <div key={acc.email} className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center text-red-600 font-bold text-sm">G</div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{acc.email}</p>
-                    <p className="text-xs text-gray-500">{acc.label}</p>
-                  </div>
+            <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-100 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-violet-100 rounded-full flex items-center justify-center text-violet-600 font-bold text-sm">
+                  {user?.name?.charAt(0).toUpperCase() || "G"}
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="success" className="text-xs gap-1">
-                    <CheckCircle className="w-3 h-3" />
-                    Bağlı
-                  </Badge>
-                  <Button variant="ghost" size="icon" className="h-7 w-7">
-                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                  </Button>
+                <div>
+                  <p className="text-sm font-medium text-gray-800">{user?.email || "Yükleniyor..."}</p>
+                  <p className="text-xs text-gray-500">Workspace / Yönetim</p>
                 </div>
               </div>
-            ))}
-            <Button variant="outline" size="sm" className="w-full gap-2">
-              <Plus className="w-4 h-4" />
-              Gmail Hesabı Ekle
-            </Button>
+              <Badge variant="success" className="text-xs gap-1 bg-green-100 text-green-700 border-none">
+                <CheckCircle className="w-3 h-3" />
+                Sisteme Bağlı
+              </Badge>
+            </div>
+            <p className="text-xs text-gray-400">Çoklu-hesap sistemi Firebase girişi aracılığıyla panel izolasyonu sağlar. Farklı bir e-posta bağlamak için hesaptan çıkış yaparak o adresle tekrar giriş yapmalısınız.</p>
           </CardContent>
         </Card>
 
@@ -95,26 +98,25 @@ export default function SettingsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50">
+            <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-100 shadow-sm">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-sm">📅</div>
                 <div>
-                  <p className="text-sm font-medium text-gray-800">nurevsan@gmail.com</p>
-                  <p className="text-xs text-gray-500">Birincil takvim</p>
+                  <p className="text-sm font-medium text-gray-800">{user?.email || "Yükleniyor..."}</p>
+                  <p className="text-xs text-gray-500">Birincil Takvim (Çift Yönlü Eşleşme Aktif)</p>
                 </div>
               </div>
-              <Badge variant="success" className="text-xs gap-1">
+              <Badge variant="success" className="text-xs gap-1 bg-green-100 text-green-700 border-none">
                 <CheckCircle className="w-3 h-3" />
-                Bağlı
+                Senkronize
               </Badge>
             </div>
-            <div className="p-3 rounded-lg bg-gray-50">
+            <div className="p-3 rounded-lg bg-gray-50 mt-2">
               <p className="text-xs font-medium text-gray-700 mb-2">AI Bot Adı</p>
               <div className="flex gap-2">
-                <Input defaultValue="Nurevşan Asistan" className="text-sm" />
-                <Button size="sm">Güncelle</Button>
+                <Input value={`${user?.name?.split(" ")[0] || "Asistan"} Botu`} readOnly className="text-sm bg-gray-100 text-gray-500" />
               </div>
-              <p className="text-xs text-gray-400 mt-1">Bu isim toplantılara katıldığında görünür</p>
+              <p className="text-xs text-gray-400 mt-1">Bu isim otomatik asistan yanıtlarında yer alan bot imzasıdır.</p>
             </div>
           </CardContent>
         </Card>
