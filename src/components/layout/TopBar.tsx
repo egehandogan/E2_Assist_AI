@@ -8,6 +8,8 @@ import { formatDate } from "@/lib/utils";
 import { useNotificationStore } from "@/lib/store";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { useAssistantStore } from "@/lib/store";
+import { Mic, MicOff } from "lucide-react";
 
 const typeConfig: Record<string, { icon: typeof Bell; color: string; bg: string }> = {
   grant_program: { icon: Landmark, color: "text-emerald-600", bg: "bg-emerald-100" },
@@ -28,6 +30,7 @@ export function TopBar({ title, subtitle }: TopBarProps) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { notifications, unreadCount, fetch: fetchNotifs, markRead, markAllRead } = useNotificationStore();
+  const { state, toggle } = useAssistantStore();
 
   useEffect(() => { fetchNotifs(); }, [fetchNotifs]);
 
@@ -49,6 +52,20 @@ export function TopBar({ title, subtitle }: TopBarProps) {
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+        {/* Assistant Trigger - To the left of search */}
+        <button
+          onClick={() => toggle()}
+          className={cn(
+            "p-2 rounded-lg transition-all border",
+            state === "off" 
+              ? "bg-white border-gray-100 text-gray-400 hover:bg-gray-50" 
+              : "bg-violet-600 border-violet-400 text-white shadow-md animate-pulse"
+          )}
+          title={state === "off" ? "Egeman Asistanı Aç" : "Egeman Asistanı Kapat"}
+        >
+          {state === "off" ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+        </button>
+
         {/* Search - hidden on small mobile */}
         <div className="relative hidden lg:block">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />

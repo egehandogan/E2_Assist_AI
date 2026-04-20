@@ -292,7 +292,32 @@ export const useNotificationStore = create<NotificationStore>((set, get) => ({
   },
 }));
 
-// ─── AI Helper ────────────────────────────────────────────────────────────────
+// ─── Assistant Store ──────────────────────────────────────────────────────────
+
+export type AssistantState = "idle" | "listening" | "processing" | "speaking" | "off";
+
+interface AssistantStore {
+  state: AssistantState;
+  isWakeWordMode: boolean;
+  setState: (state: AssistantState) => void;
+  setWakeWordMode: (mode: boolean) => void;
+  toggle: () => void;
+}
+
+export const useAssistantStore = create<AssistantStore>((set, get) => ({
+  state: "off",
+  isWakeWordMode: false,
+  setState: (state) => set({ state }),
+  setWakeWordMode: (isWakeWordMode) => set({ isWakeWordMode }),
+  toggle: () => {
+    const s = get().state;
+    if (s === "off") {
+      set({ state: "idle", isWakeWordMode: true });
+    } else {
+      set({ state: "off", isWakeWordMode: false });
+    }
+  },
+}));
 
 export async function aiAnalyze(type: string, content: string): Promise<{ result?: string; tasks?: Task[]; error?: string }> {
   try {

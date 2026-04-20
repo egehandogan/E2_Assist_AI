@@ -4,16 +4,14 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { JarvisHalo } from "./JarvisHalo";
 import { VoiceWave } from "./VoiceWave";
-import { Mic, MicOff, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { X } from "lucide-react";
 
-type AssistantState = "idle" | "listening" | "processing" | "speaking" | "off";
+import { useAssistantStore } from "@/lib/store";
 
 export function JarvisAssistant() {
-  const [state, setState] = useState<AssistantState>("off");
+  const { state, setState, isWakeWordMode } = useAssistantStore();
   const [transcript, setTranscript] = useState("");
   const [response, setResponse] = useState("");
-  const [isWakeWordMode, setIsWakeWordMode] = useState(true);
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
 
@@ -45,7 +43,7 @@ export function JarvisAssistant() {
     utterance.onstart = () => setState("speaking");
     utterance.onend = () => setState(isWakeWordMode ? "idle" : "off");
     synthRef.current.speak(utterance);
-  }, [isWakeWordMode]);
+  }, [isWakeWordMode, setState]);
 
   const processCommand = useCallback(async (text: string) => {
     setState("processing");
@@ -72,11 +70,9 @@ export function JarvisAssistant() {
       speak("Üzgünüm, bir hata oluştu.");
       setState("idle");
     }
-  }, [speak]);
+  }, [speak, setState]);
 
   useEffect(() => {
-    if (!recognitionRef.current) return;
-
     recognitionRef.current.onresult = (event: any) => {
       const results = event.results;
       const lastResult = results[results.length - 1];
@@ -84,12 +80,25 @@ export function JarvisAssistant() {
 
       if (lastResult.isFinal) {
         setTranscript(text);
+        // Barge-in: If user says something while speaking, stop speaking and listen
+        if (state === "speaking" && text.length > 5) {
+          synthRef.current?.cancel();
+          setState("listening");
+        }
+
         if (state === "listening") {
           processCommand(text);
         } else if (isWakeWordMode && text.includes("egeman")) {
           setState("listening");
           speak("Efendim?");
         }
+      }
+    };
+
+    recognitionRef.current.onend = () => {
+      // Auto-restart if we are supposed to be active
+      if (isWakeWordMode && state !== "off") {
+        try { recognitionRef.current.start(); } catch {}
       }
     };
 
@@ -103,39 +112,16 @@ export function JarvisAssistant() {
 
     return () => {
       try {
+        recognitionRef.current.onend = null;
         recognitionRef.current.stop();
       } catch {}
     };
-  }, [isWakeWordMode, state, speak, processCommand]);
+  }, [isWakeWordMode, state, speak, processCommand, setState]);
 
-  const toggleAssistant = () => {
-    if (state === "off") {
-      setIsWakeWordMode(true);
-      setState("idle");
-      speak("Egeman asistan aktif.");
-    } else {
-      setIsWakeWordMode(false);
-      setState("off");
-      recognitionRef.current?.stop();
-    }
-  };
-
+  // Floating button removed as it's now in TopBar
   return (
     <>
-      {/* Floating Button in TopRight (always visible if not in center) */}
-      <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-        <button
-          onClick={toggleAssistant}
-          className={cn(
-            "p-2.5 rounded-full shadow-lg transition-all border-2",
-            state === "off" 
-              ? "bg-white border-gray-100 text-gray-400" 
-              : "bg-violet-600 border-violet-400 text-white animate-pulse"
-          )}
-        >
-          {state === "off" ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-        </button>
-      </div>
+
 
       <AnimatePresence>
         {state !== "off" && state !== "idle" && (
