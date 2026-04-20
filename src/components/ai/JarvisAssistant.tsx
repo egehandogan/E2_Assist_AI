@@ -43,11 +43,16 @@ export function JarvisAssistant() {
     const maleVoice = voices.find(v => v.lang.startsWith("tr") && (v.name.toLowerCase().includes("male") || v.name.toLowerCase().includes("erkek")));
     if (maleVoice) utterance.voice = maleVoice;
     
-    utterance.onstart = () => setState("speaking");
+    utterance.onstart = () => {
+      setState("speaking");
+      try { recognitionRef.current.stop(); } catch {} // Stop listening while speaking
+    };
     utterance.onend = () => {
       if (isPendingCommand) {
         setIsPendingCommand(false);
+        setInterimText(""); // Clear for fresh command
         setState("listening");
+        // Recognition will auto-restart via useEffect or onend
       } else {
         setState(isWakeWordMode ? "idle" : "off");
       }
@@ -92,20 +97,29 @@ export function JarvisAssistant() {
 
       if (lastResult.isFinal) {
         if (speechEndTimeoutRef.current) clearTimeout(speechEndTimeoutRef.current);
-        // ... rest of the logic
-        // Barge-in: If user says something while speaking, stop speaking and listen
+        
         if (state === "speaking" && text.length > 5) {
           synthRef.current?.cancel();
+          setInterimText("");
           setState("listening");
+          return;
         }
 
         if (state === "listening") {
           if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
           processCommand(text);
+          setInterimText("");
         } else if (isWakeWordMode && text.includes("egeman")) {
-          setIsPendingCommand(true); // Flag to listen after Efendim
-          setState("listening");
-          speak("Efendim?");
+          // Check if there is a command immediately following the wake word
+          const commandAfterName = text.split("egeman")[1]?.trim();
+          if (commandAfterName && commandAfterName.length > 3) {
+            processCommand(commandAfterName);
+          } else {
+            setIsPendingCommand(true); // Flag to listen after Efendim
+            setInterimText("");
+            setState("listening"); // Set state first
+            speak("Efendim?");
+          }
         }
       }
     };
