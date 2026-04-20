@@ -78,10 +78,16 @@ export default function LibraryPage() {
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
     let files: FileList | null = null;
-    if ("files" in e.target && e.target.files) {
-      files = e.target.files;
-    } else if ("dataTransfer" in e && e.dataTransfer.files) {
-      files = e.dataTransfer.files;
+    
+    // Check if it's a file input change
+    if (e.type === "change") {
+      const target = e.target as HTMLInputElement;
+      files = target.files;
+    } 
+    // Check if it's a drag and drop
+    else if (e.type === "drop") {
+      const dragEvent = e as React.DragEvent;
+      files = dragEvent.dataTransfer.files;
     }
 
     if (!files || files.length === 0) return;
@@ -253,18 +259,25 @@ export default function LibraryPage() {
                 "border-2 border-dashed rounded-xl p-8 mb-6 text-center transition-all cursor-pointer relative overflow-hidden",
                 isDragging
                   ? "border-violet-400 bg-violet-50 scale-[1.01]"
-                  : "border-gray-200 hover:border-violet-300 hover:bg-violet-50/30"
+                  : "border-gray-200 hover:border-violet-300 hover:bg-violet-50/30",
+                loading && "opacity-50 pointer-events-none"
               )}
               onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleUpload(e); }}
+              onClick={() => fileInputRef.current?.click()}
             >
-              <Upload className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+              <Upload className={cn("w-8 h-8 mx-auto mb-2 transition-colors", isDragging ? "text-violet-500" : "text-gray-300")} />
               <p className="text-sm text-gray-500">
                 Dosyaları buraya sürükleyin veya{" "}
                 <span className="text-violet-600 font-medium">seçmek için tıklayın</span>
               </p>
               <p className="text-xs text-gray-400 mt-1">Google Drive ile tam senkronize çalışır</p>
+              {loading && (
+                <div className="absolute inset-0 bg-white/40 flex items-center justify-center">
+                  <Loader2 className="w-6 h-6 animate-spin text-violet-600" />
+                </div>
+              )}
             </div>
 
             {/* Content List */}
