@@ -4,12 +4,11 @@ import { useState, useRef, useEffect } from "react";
 import { Bell, Search, Plus, CheckCheck, Landmark, Globe2, CheckSquare, Calendar, Mail, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatDate } from "@/lib/utils";
-import { useNotificationStore } from "@/lib/store";
+import { formatDate, cn } from "@/lib/utils";
+import { useNotificationStore, useAssistantStore } from "@/lib/store";
 import Link from "next/link";
-import { cn } from "@/lib/utils";
-import { useAssistantStore } from "@/lib/store";
 import { Mic, MicOff } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 const typeConfig: Record<string, { icon: typeof Bell; color: string; bg: string }> = {
   grant_program: { icon: Landmark, color: "text-emerald-600", bg: "bg-emerald-100" },
@@ -30,7 +29,7 @@ export function TopBar({ title, subtitle }: TopBarProps) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const { notifications, unreadCount, fetch: fetchNotifs, markRead, markAllRead } = useNotificationStore();
-  const { state, toggle } = useAssistantStore();
+  const { state, toggle, volume } = useAssistantStore();
 
   useEffect(() => { fetchNotifs(); }, [fetchNotifs]);
 
@@ -56,14 +55,55 @@ export function TopBar({ title, subtitle }: TopBarProps) {
         <button
           onClick={() => toggle()}
           className={cn(
-            "p-2 rounded-lg transition-all border",
+            "relative p-2 rounded-lg transition-all border w-10 h-9 flex items-center justify-center overflow-hidden",
             state === "off" 
               ? "bg-white border-gray-100 text-gray-400 hover:bg-gray-50" 
-              : "bg-violet-600 border-violet-400 text-white shadow-md animate-pulse"
+              : "bg-violet-600 border-violet-400 text-white shadow-md"
           )}
           title={state === "off" ? "Egeman Asistanı Aç" : "Egeman Asistanı Kapat"}
         >
-          {state === "off" ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+          <AnimatePresence mode="wait">
+            {state === "listening" ? (
+              <motion.div 
+                key="listening"
+                className="flex items-center gap-0.5"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                {[...Array(4)].map((_, i) => (
+                  <motion.div
+                    key={i}
+                    className="w-0.5 bg-white rounded-full"
+                    animate={{ 
+                      height: [4, Math.max(4, (volume / (i + 1)) * 0.4 + 4), 4] 
+                    }}
+                    transition={{ repeat: Infinity, duration: 0.2, delay: i * 0.05 }}
+                  />
+                ))}
+              </motion.div>
+            ) : state === "processing" ? (
+              <motion.div
+                key="processing"
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+              >
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full" />
+              </motion.div>
+            ) : state === "speaking" ? (
+              <motion.div
+                key="speaking"
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ repeat: Infinity, duration: 0.6 }}
+              >
+                <div className="w-3 h-3 bg-fuchsia-400 rounded-full shadow-[0_0_10px_rgba(232,121,249,0.8)]" />
+              </motion.div>
+            ) : (
+              <motion.div key={state === "off" ? "mic-off" : "mic-on"}>
+                {state === "off" ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4 animate-pulse" />}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </button>
 
         {/* Search - hidden on small mobile */}

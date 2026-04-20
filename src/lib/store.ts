@@ -299,22 +299,26 @@ export type AssistantState = "idle" | "listening" | "processing" | "speaking" | 
 interface AssistantStore {
   state: AssistantState;
   isWakeWordMode: boolean;
+  volume: number; // 0-100
   setState: (state: AssistantState) => void;
   setWakeWordMode: (mode: boolean) => void;
+  setVolume: (volume: number) => void;
   toggle: () => void;
 }
 
 export const useAssistantStore = create<AssistantStore>((set, get) => ({
   state: "off",
   isWakeWordMode: false,
+  volume: 0,
   setState: (state) => set({ state }),
   setWakeWordMode: (isWakeWordMode) => set({ isWakeWordMode }),
+  setVolume: (volume) => set({ volume }),
   toggle: () => {
     const s = get().state;
     if (s === "off") {
       set({ state: "idle", isWakeWordMode: true });
     } else {
-      set({ state: "off", isWakeWordMode: false });
+      set({ state: "off", isWakeWordMode: false, volume: 0 });
     }
   },
 }));
