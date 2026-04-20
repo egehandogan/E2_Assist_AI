@@ -1,16 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { TopBar } from "@/components/layout/TopBar";
 import {
   FolderOpen, Upload, Search, Grid, List, Image, FileText,
-  CreditCard, File, Folder, MoreHorizontal, Star, Download,
-  Eye, Trash2, Plus, Camera, Filter, ChevronDown
+  CreditCard, File, Folder, Star, Download,
+  Eye, Trash2, Plus, ChevronRight, Loader2, X
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Modal } from "@/components/ui/modal";
 import { cn } from "@/lib/utils";
 
 interface LibraryItem {
@@ -24,6 +24,7 @@ interface LibraryItem {
   description?: string;
   isStarred?: boolean;
   url?: string;
+  mimeType?: string;
 }
 
 const typeConfig = {
@@ -45,21 +46,69 @@ export default function LibraryPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentFolderId, setCurrentFolderId] = useState("root");
+  const [breadcrumbs, setBreadcrumbs] = useState([{ id: "root", name: "Drive" }]);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetchItems();
-  }, []);
+    fetchItems(currentFolderId);
+  }, [currentFolderId]);
 
-  const fetchItems = async () => {
+  const fetchItems = async (folderId: string) => {
     try {
       setLoading(true);
-      const res = await fetch("/api/drive");
+      const res = await fetch(`/api/drive?folderId=${folderId}`);
       if (res.ok) {
         setItems(await res.json());
       }
     } catch {} finally {
       setLoading(false);
     }
+  };
+
+  const navigateToFolder = (id: string, name: string) => {
+    setCurrentFolderId(id);
+    setBreadcrumbs(prev => {
+      const idx = prev.findIndex(b => b.id === id);
+      if (idx !== -1) return prev.slice(0, idx + 1);
+      return [...prev, { id, name }];
+    });
+  };
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent) => {
+    let files: FileList | null = null;
+    if ("files" in e.target && e.target.files) {
+      files = e.target.files;
+    } else if ("dataTransfer" in e && e.dataTransfer.files) {
+      files = e.dataTransfer.files;
+    }
+
+    if (!files || files.length === 0) return;
+
+    try {
+      setLoading(true);
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("parentId", currentFolderId);
+
+        await fetch("/api/drive", {
+          method: "POST",
+          body: formData,
+        });
+      }
+      fetchItems(currentFolderId);
+    } catch {
+      alert("Hata oluştu");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownload = (item: LibraryItem) => {
+    window.open(`/api/drive/download?fileId=${item.id}`, "_blank");
   };
 
   const createFolder = async () => {
@@ -69,11 +118,10 @@ export default function LibraryPage() {
       const res = await fetch("/api/drive", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create_folder", name, parentId: "root" })
+        body: JSON.stringify({ action: "create_folder", name, parentId: currentFolderId })
       });
       if (res.ok) {
-        fetchItems();
-        alert("Klasör oluşturuldu");
+        fetchItems(currentFolderId);
       }
     } catch {
       alert("Hata oluştu");
@@ -93,32 +141,33 @@ export default function LibraryPage() {
     return true;
   });
 
-  const stats = {
-    total: items.length,
-    images: items.filter((i) => i.type === "image").length,
-    documents: items.filter((i) => i.type === "document" || i.type === "pdf").length,
-    cards: items.filter((i) => i.type === "card").length,
-  };
+  // Remove unused stats logic
+  // ... (Removed)
+
+
 
   return (
-    <div className="flex flex-col h-full">
-      <TopBar title="Kütüphane" subtitle="Google Drive entegrasyonu" />
+    <div className="flex flex-col h-full bg-gray-50/50">
+      <TopBar title="Kütüphane" subtitle="Google Drive senkronizasyonu" />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Main content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Stats + toolbar */}
+          {/* Breadcrumbs + toolbar */}
           <div className="px-6 py-4 bg-white border-b border-gray-100 space-y-4">
-            <div className="grid grid-cols-4 gap-3">
-              {[
-                { label: "Toplam Dosya", value: stats.total },
-                { label: "Görseller", value: stats.images },
-                { label: "Belgeler", value: stats.documents },
-                { label: "Kartvizitler", value: stats.cards },
-              ].map((s) => (
-                <div key={s.label} className="text-center">
-                  <p className="text-lg font-bold text-gray-900">{s.value}</p>
-                  <p className="text-xs text-gray-500">{s.label}</p>
+            <div className="flex items-center gap-2 text-xs text-gray-500 overflow-x-auto pb-1 no-scrollbar">
+              {breadcrumbs.map((b, idx) => (
+                <div key={b.id} className="flex items-center shrink-0">
+                  <button 
+                    onClick={() => navigateToFolder(b.id, b.name)}
+                    className={cn(
+                      "hover:text-violet-600 transition-colors",
+                      idx === breadcrumbs.length - 1 && "font-semibold text-gray-900"
+                    )}
+                  >
+                    {b.name}
+                  </button>
+                  {idx < breadcrumbs.length - 1 && <ChevronRight className="w-3.5 h-3.5 mx-1 opacity-40" />}
                 </div>
               ))}
             </div>
@@ -134,7 +183,7 @@ export default function LibraryPage() {
                 />
               </div>
 
-              <div className="flex gap-1.5">
+              <div className="flex gap-1.5 shrink-0">
                 {(["all", "image", "document", "card", "pdf"] as FilterType[]).map((f) => (
                   <button
                     key={f}
@@ -146,12 +195,12 @@ export default function LibraryPage() {
                         : "text-gray-500 hover:bg-gray-100"
                     )}
                   >
-                    {f === "all" ? "Tümü" : f === "image" ? "Görseller" : f === "document" ? "Belgeler" : f === "card" ? "Kartvizit" : "PDF"}
+                    {f === "all" ? "Tümü" : f === "image" ? "Görseller" : f === "document" ? "Belgeler" : f === "card" ? "Kart" : "PDF"}
                   </button>
                 ))}
               </div>
 
-              <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-1">
+              <div className="flex items-center gap-1 border border-gray-200 rounded-lg p-1 shrink-0">
                 <button
                   onClick={() => setViewMode("grid")}
                   className={cn(
@@ -174,115 +223,117 @@ export default function LibraryPage() {
 
               <Button size="sm" className="gap-1.5" onClick={createFolder}>
                 <Plus className="w-4 h-4" />
-                Klasör Ekle
+                Klasör
               </Button>
-              <Button size="sm" variant="outline" className="gap-1.5">
-                <Camera className="w-4 h-4" />
-                Fotoğraf Ekle
+              <input 
+                type="file" 
+                ref={fileInputRef} 
+                onChange={handleUpload} 
+                className="hidden" 
+                multiple
+              />
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="w-4 h-4" />
+                Yükle
               </Button>
             </div>
           </div>
 
-          {/* Drop zone + file grid */}
-          <div className="flex-1 overflow-y-auto p-6">
+          {/* List content */}
+          <div className="flex-1 overflow-y-auto p-6 relative">
+            {loading && !items.length && (
+              <div className="absolute inset-0 flex items-center justify-center text-violet-600 z-10 bg-white/50">
+                <Loader2 className="w-8 h-8 animate-spin" />
+              </div>
+            )}
+
             {/* Drop zone */}
             <div
               className={cn(
-                "border-2 border-dashed rounded-xl p-6 mb-6 text-center transition-all cursor-pointer",
+                "border-2 border-dashed rounded-xl p-8 mb-6 text-center transition-all cursor-pointer relative overflow-hidden",
                 isDragging
-                  ? "border-violet-400 bg-violet-50"
+                  ? "border-violet-400 bg-violet-50 scale-[1.01]"
                   : "border-gray-200 hover:border-violet-300 hover:bg-violet-50/30"
               )}
               onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
               onDragLeave={() => setIsDragging(false)}
-              onDrop={() => setIsDragging(false)}
+              onDrop={(e) => { e.preventDefault(); setIsDragging(false); handleUpload(e); }}
             >
               <Upload className="w-8 h-8 mx-auto text-gray-300 mb-2" />
               <p className="text-sm text-gray-500">
                 Dosyaları buraya sürükleyin veya{" "}
-                <span className="text-violet-600 font-medium cursor-pointer hover:underline">seçmek için tıklayın</span>
+                <span className="text-violet-600 font-medium">seçmek için tıklayın</span>
               </p>
-              <p className="text-xs text-gray-400 mt-1">PNG, JPG, PDF, DOCX, XLSX desteklenir</p>
+              <p className="text-xs text-gray-400 mt-1">Google Drive ile tam senkronize çalışır</p>
             </div>
 
-            {/* File grid/list */}
-            {viewMode === "grid" ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            {/* Content List */}
+            {items.length === 0 && !loading ? (
+              <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                <FolderOpen className="w-12 h-12 mb-3 opacity-20" />
+                <p>Bu klasör boş</p>
+              </div>
+            ) : viewMode === "grid" ? (
+              <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                 {filteredItems.map((item) => {
                   const config = typeConfig[item.type];
                   const Icon = config.icon;
                   return (
                     <div
                       key={item.id}
-                      onClick={() => setSelectedItem(item)}
+                      onClick={() => {
+                        if (item.type === "folder") navigateToFolder(item.id, item.name);
+                        else setSelectedItem(item);
+                      }}
                       className={cn(
                         "group relative rounded-xl border bg-white p-3 cursor-pointer transition-all hover:shadow-md hover:border-violet-200",
-                        selectedItem?.id === item.id && "border-violet-400 bg-violet-50"
+                        selectedItem?.id === item.id && "border-violet-400 ring-1 ring-violet-400"
                       )}
                     >
-                      <div className={`w-full aspect-square ${config.bg} rounded-lg flex items-center justify-center mb-2 relative`}>
-                        <Icon className={`w-8 h-8 ${config.color}`} />
+                      <div className={`w-full aspect-square ${config.bg} rounded-lg flex items-center justify-center mb-3 relative`}>
+                        {item.thumbnail ? (
+                          <img src={item.thumbnail} alt="" className="w-full h-full object-cover rounded-lg" />
+                        ) : (
+                          <Icon className={`w-8 h-8 ${config.color}`} />
+                        )}
                         {item.isStarred && (
-                          <Star className="absolute top-1.5 right-1.5 w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                          <Star className="absolute top-2 right-2 w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                         )}
                       </div>
-                      <p className="text-xs font-medium text-gray-800 truncate">{item.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{item.size || item.date}</p>
-
-                      {/* Hover actions */}
-                      <div className="absolute top-2 right-2 hidden group-hover:flex gap-1">
-                        <button className="p-1 bg-white rounded-lg shadow-sm hover:bg-gray-50">
-                          <Eye className="w-3 h-3 text-gray-500" />
-                        </button>
-                        <button className="p-1 bg-white rounded-lg shadow-sm hover:bg-gray-50">
-                          <Download className="w-3 h-3 text-gray-500" />
-                        </button>
-                      </div>
+                      <p className="text-xs font-semibold text-gray-800 truncate">{item.name}</p>
+                      <p className="text-[10px] text-gray-400 mt-1 uppercase font-medium">{item.size || (item.type === "folder" ? "Klasör" : item.date)}</p>
                     </div>
                   );
                 })}
               </div>
             ) : (
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 {filteredItems.map((item) => {
                   const config = typeConfig[item.type];
                   const Icon = config.icon;
                   return (
                     <div
                       key={item.id}
-                      onClick={() => setSelectedItem(item)}
+                      onClick={() => {
+                        if (item.type === "folder") navigateToFolder(item.id, item.name);
+                        else setSelectedItem(item);
+                      }}
                       className={cn(
-                        "flex items-center gap-3 p-3 rounded-xl border bg-white cursor-pointer transition-all hover:shadow-sm hover:border-violet-200",
+                        "flex items-center gap-4 p-3 rounded-xl border bg-white cursor-pointer transition-all hover:border-violet-200",
                         selectedItem?.id === item.id && "border-violet-400 bg-violet-50"
                       )}
                     >
-                      <div className={`w-10 h-10 ${config.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                      <div className={`w-10 h-10 ${config.bg} rounded-lg flex items-center justify-center shrink-0`}>
                         <Icon className={`w-5 h-5 ${config.color}`} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-800 truncate">{item.name}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-xs text-gray-400">{item.date}</span>
-                          {item.size && <span className="text-xs text-gray-400">{item.size}</span>}
-                          {item.tags?.map((tag) => (
-                            <Badge key={tag} variant="secondary" className="text-xs py-0 px-1.5">
-                              {tag}
-                            </Badge>
-                          ))}
+                        <div className="flex items-center gap-3 mt-1">
+                          <span className="text-[11px] text-gray-400">{item.date}</span>
+                          {item.size && <span className="text-[11px] text-gray-400 px-1 border-x border-gray-200">{item.size}</span>}
                         </div>
                       </div>
-                      {item.isStarred && <Star className="w-4 h-4 text-amber-400 fill-amber-400 flex-shrink-0" />}
-                      <div className="flex gap-1 flex-shrink-0">
-                        <button className="p-1.5 hover:bg-gray-100 rounded-lg">
-                          <Eye className="w-4 h-4 text-gray-400" />
-                        </button>
-                        <button className="p-1.5 hover:bg-gray-100 rounded-lg">
-                          <Download className="w-4 h-4 text-gray-400" />
-                        </button>
-                        <button className="p-1.5 hover:bg-gray-100 rounded-lg">
-                          <MoreHorizontal className="w-4 h-4 text-gray-400" />
-                        </button>
-                      </div>
+                      {item.isStarred && <Star className="w-4 h-4 text-amber-400 fill-amber-400 shrink-0" />}
                     </div>
                   );
                 })}
@@ -293,62 +344,58 @@ export default function LibraryPage() {
 
         {/* Detail panel */}
         {selectedItem && (
-          <div className="w-72 border-l border-gray-100 bg-white overflow-y-auto">
+          <div className="w-80 border-l border-gray-100 bg-white flex flex-col shrink-0">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-              <p className="text-sm font-semibold text-gray-900">Detaylar</p>
-              <button onClick={() => setSelectedItem(null)} className="text-gray-400 hover:text-gray-600">×</button>
+              <p className="text-sm font-semibold text-gray-900">Dosya Detayı</p>
+              <button onClick={() => setSelectedItem(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <div className="p-4 space-y-4">
+            <div className="p-5 flex-1 overflow-y-auto space-y-6">
               {(() => {
                 const config = typeConfig[selectedItem.type];
                 const Icon = config.icon;
                 return (
                   <>
-                    <div className={`w-full aspect-video ${config.bg} rounded-xl flex items-center justify-center`}>
-                      <Icon className={`w-12 h-12 ${config.color}`} />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-sm text-gray-900 break-all">{selectedItem.name}</p>
-                      <Badge variant="secondary" className="mt-1 text-xs">{config.label}</Badge>
-                    </div>
-                    {selectedItem.description && (
-                      <div>
-                        <p className="text-xs font-medium text-gray-500 mb-1">OCR / İçerik</p>
-                        <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-2">{selectedItem.description}</p>
-                      </div>
-                    )}
-                    <div className="space-y-1 text-xs text-gray-500">
-                      <div className="flex justify-between">
-                        <span>Tarih</span>
-                        <span className="text-gray-700">{selectedItem.date}</span>
-                      </div>
-                      {selectedItem.size && (
-                        <div className="flex justify-between">
-                          <span>Boyut</span>
-                          <span className="text-gray-700">{selectedItem.size}</span>
-                        </div>
+                    <div className={`w-full aspect-square ${config.bg} rounded-2xl flex items-center justify-center p-8`}>
+                      {selectedItem.thumbnail ? (
+                        <img src={selectedItem.thumbnail.replace(/=s[0-9]+/, "=s400")} alt="" className="w-full h-full object-contain rounded-xl shadow-lg" />
+                      ) : (
+                        <Icon className={`w-16 h-16 ${config.color}`} />
                       )}
                     </div>
-                    {selectedItem.tags && selectedItem.tags.length > 0 && (
+                    <div>
+                      <h3 className="font-bold text-gray-900 break-words leading-tight">{selectedItem.name}</h3>
+                      <Badge variant="secondary" className="mt-2 text-xs font-normal">{config.label}</Badge>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 py-4 border-y border-gray-50">
                       <div>
-                        <p className="text-xs font-medium text-gray-500 mb-1.5">Etiketler</p>
-                        <div className="flex flex-wrap gap-1">
-                          {selectedItem.tags.map((tag) => (
-                            <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
-                          ))}
-                        </div>
+                        <p className="text-[10px] uppercase font-bold text-gray-400 mb-1">Tür</p>
+                        <p className="text-xs text-gray-700">{selectedItem.mimeType?.split("/")[1]?.toUpperCase() || "Bilinmiyor"}</p>
                       </div>
-                    )}
-                    <div className="space-y-2 pt-2 border-t border-gray-100">
-                      <Button size="sm" className="w-full gap-2" onClick={() => window.open(selectedItem.url, "_blank")}>
-                        <Eye className="w-4 h-4" /> Görüntüle
+                      <div>
+                        <p className="text-[10px] uppercase font-bold text-gray-400 mb-1">Boyut</p>
+                        <p className="text-xs text-gray-700">{selectedItem.size || "-"}</p>
+                      </div>
+                      <div className="col-span-2">
+                        <p className="text-[10px] uppercase font-bold text-gray-400 mb-1">Oluşturulma</p>
+                        <p className="text-xs text-gray-700">{selectedItem.date}</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <Button className="w-full gap-2 rounded-xl h-11" onClick={() => setIsPreviewOpen(true)}>
+                        <Eye className="w-4 h-4" /> Önizle
                       </Button>
-                      <Button size="sm" variant="outline" className="w-full gap-2">
-                        <Download className="w-4 h-4" /> İndir
-                      </Button>
-                      <Button size="sm" variant="destructive" className="w-full gap-2">
-                        <Trash2 className="w-4 h-4" /> Sil
-                      </Button>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Button variant="outline" className="gap-2 rounded-xl" onClick={() => handleDownload(selectedItem)}>
+                          <Download className="w-4 h-4" /> İndir
+                        </Button>
+                        <Button variant="outline" className="gap-2 rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 border-gray-100">
+                          <Trash2 className="w-4 h-4" /> Sil
+                        </Button>
+                      </div>
                     </div>
                   </>
                 );
@@ -357,6 +404,34 @@ export default function LibraryPage() {
           </div>
         )}
       </div>
+
+      {/* Preview Modal */}
+      {selectedItem && (
+        <Modal
+          open={isPreviewOpen}
+          onClose={() => setIsPreviewOpen(false)}
+          title={selectedItem.name}
+          className="max-w-5xl w-[90vw] h-[85vh] p-0 overflow-hidden bg-gray-900 border-none"
+        >
+          <div className="w-full h-full flex flex-col">
+            <div className="flex-1 bg-white flex items-center justify-center p-4">
+              {selectedItem.type === "image" ? (
+                <img src={selectedItem.url || "/placeholder.png"} alt={selectedItem.name} className="max-w-full max-h-full object-contain" />
+              ) : selectedItem.mimeType?.includes("pdf") ? (
+                <iframe src={selectedItem.url?.replace("/view", "/preview")} className="w-full h-full border-none" />
+              ) : selectedItem.mimeType?.includes("google-apps") ? (
+                <iframe src={selectedItem.url?.replace("/edit", "/preview")} className="w-full h-full border-none" />
+              ) : (
+                <div className="text-center">
+                  <FileText className="w-12 h-12 mx-auto text-gray-300 mb-2" />
+                  <p className="text-gray-500">Bu dosya önizlenemiyor. Lütfen indirin.</p>
+                  <Button variant="outline" className="mt-4" onClick={() => handleDownload(selectedItem)}>İndir</Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

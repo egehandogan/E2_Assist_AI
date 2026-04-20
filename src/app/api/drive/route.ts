@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getGoogleApis } from "@/lib/google";
 import { auth } from "@/lib/auth";
 import { cookies } from "next/headers";
+import { PassThrough } from "stream";
 
 export async function GET(req: Request) {
   try {
@@ -93,8 +94,39 @@ export async function POST(req: Request) {
     }
 
     const { drive } = googleApis;
-    const body = await req.json();
+    const contentType = req.headers.get("content-type") || "";
 
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await req.formData();
+      const file = formData.get("file") as File;
+      const parentId = (formData.get("parentId") as string) || "root";
+
+      if (!file) {
+        return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      }
+
+      // Convert File to Buffer/Stream for Google SDK
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const bufferStream = new PassThrough();
+      bufferStream.end(buffer);
+
+      const res = await drive.files.create({
+        requestBody: {
+          name: file.name,
+          parents: [parentId],
+        },
+        media: {
+          mimeType: file.type,
+          body: bufferStream,
+        },
+        fields: "id, name, webViewLink",
+      });
+
+      return NextResponse.json({ id: res.data.id, ok: true, name: res.data.name });
+    }
+
+    // Handle JSON actions (like create_folder)
+    const body = await req.json();
     if (body.action === "create_folder") {
       const res = await drive.files.create({
         requestBody: {
@@ -109,6 +141,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (err) {
-    return NextResponse.json({ error: "Failed" }, { status: 500 });
+    console.error("Upload/Action Error:", err);
+    return NextResponse.json({ error: "Failed to process request" }, { status: 500 });
   }
 }
+
