@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/layout/Sidebar";
 import { SeedInit } from "@/components/dashboard/SeedInit";
+import { JarvisAssistant } from "@/components/ai/JarvisAssistant";
 
 export default function DashboardLayout({
   children,
@@ -13,6 +14,8 @@ export default function DashboardLayout({
       <main className="flex-1 overflow-y-auto">
         {children}
       </main>
+      <JarvisAssistant />
     </div>
   );
 }
+
