@@ -3,6 +3,7 @@
 import { useEffect, useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAssistantStore } from "@/lib/store";
+import { AssistantPulse } from "./AssistantPulse";
 
 export function JarvisAssistant() {
   const router = useRouter();
@@ -177,8 +178,8 @@ export function JarvisAssistant() {
             sum += dataArray[i];
           }
           const average = sum / bufferLength;
-          // Increased sensitivity: Math.pow and higher multiplier
-          const normalizedVolume = Math.min(100, Math.floor(Math.pow(average, 1.2) * 2.5));
+          // Aggressive sensitivity: Multiplier increased to 4.0
+          const normalizedVolume = Math.min(100, Math.floor(Math.pow(average, 1.3) * 4.0));
           setVolume(normalizedVolume);
 
           // Early Speech Detection: If volume drops after being high, trigger processing
@@ -189,9 +190,9 @@ export function JarvisAssistant() {
                   processCommand(interimText);
                   setInterimText("");
                 }
-              }, 1500); // 1.5 seconds of silence = end of speech
+              }, 500); // 0.5 seconds of silence = end of speech (Ultra-fast)
             }
-          } else if (normalizedVolume > 10) {
+          } else if (normalizedVolume > 15) {
             if (speechEndTimeoutRef.current) {
               clearTimeout(speechEndTimeoutRef.current);
               speechEndTimeoutRef.current = null;
@@ -223,7 +224,10 @@ export function JarvisAssistant() {
     };
   }, [state, setVolume, interimText, processCommand, speak, setState]);
 
-  // Center overlay removed as per user request
-  return null;
+  return (
+    <>
+      <AssistantPulse />
+    </>
+  );
 }
 
