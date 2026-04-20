@@ -66,19 +66,19 @@ export function TopBar({ title, subtitle }: TopBarProps) {
             {state === "listening" ? (
               <motion.div 
                 key="listening"
-                className="flex items-center gap-0.5"
+                className="flex items-center gap-0.75"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
               >
-                {[...Array(4)].map((_, i) => (
+                {[...Array(5)].map((_, i) => (
                   <motion.div
                     key={i}
-                    className="w-0.5 bg-white rounded-full"
+                    className="w-0.75 bg-fuchsia-400 rounded-full shadow-[0_0_8px_rgba(232,121,249,0.6)]"
                     animate={{ 
-                      height: [4, Math.max(4, (volume / (i + 1)) * 0.4 + 4), 4] 
+                      height: [6, Math.max(6, (volume / (i + 1)) * 0.6 + 6), 6] 
                     }}
-                    transition={{ repeat: Infinity, duration: 0.2, delay: i * 0.05 }}
+                    transition={{ repeat: Infinity, duration: 0.15, delay: i * 0.03 }}
                   />
                 ))}
               </motion.div>

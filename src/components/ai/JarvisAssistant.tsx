@@ -8,6 +8,9 @@ export function JarvisAssistant() {
   const router = useRouter();
   const { state, setState, isWakeWordMode, setVolume } = useAssistantStore();
   const [isPendingCommand, setIsPendingCommand] = useState(false);
+  const [interimText, setInterimText] = useState("");
+  const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const speechEndTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -84,8 +87,11 @@ export function JarvisAssistant() {
       const results = event.results;
       const lastResult = results[results.length - 1];
       const text = lastResult[0].transcript.toLowerCase();
+      setInterimText(text);
 
       if (lastResult.isFinal) {
+        if (speechEndTimeoutRef.current) clearTimeout(speechEndTimeoutRef.current);
+        // ... rest of the logic
         // Barge-in: If user says something while speaking, stop speaking and listen
         if (state === "speaking" && text.length > 5) {
           synthRef.current?.cancel();
@@ -93,6 +99,7 @@ export function JarvisAssistant() {
         }
 
         if (state === "listening") {
+          if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
           processCommand(text);
         } else if (isWakeWordMode && text.includes("egeman")) {
           setIsPendingCommand(true); // Flag to listen after Efendim
@@ -129,17 +136,29 @@ export function JarvisAssistant() {
   useEffect(() => {
     if (state !== "listening") {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
       setVolume(0);
       return;
     }
+
+    // Set a timeout to check if the user is silent
+    silenceTimeoutRef.current = setTimeout(() => {
+      if (state === "listening") {
+        speak("Pardon, sizi tam duyamadım. Tekrar eder misiniz?");
+        setState("idle");
+      }
+    }, 12000); // 12 seconds of total silence before giving up
 
     let stream: MediaStream | null = null;
 
     const startAnalysis = async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const currentAudioCtx = audioContextRef.current;
-        if (!currentAudioCtx) return;
+        if (!audioContextRef.current) {
+          const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
+          audioContextRef.current = new AudioContextClass();
+        }
+        const currentAudioCtx = audioContextRef.current!;
         analyserRef.current = currentAudioCtx.createAnalyser();
         const source = currentAudioCtx.createMediaStreamSource(stream);
         source.connect(analyserRef.current);
@@ -158,10 +177,33 @@ export function JarvisAssistant() {
             sum += dataArray[i];
           }
           const average = sum / bufferLength;
-          setVolume(Math.min(100, Math.floor(average * 1.5)));
+          // Increased sensitivity: Math.pow and higher multiplier
+          const normalizedVolume = Math.min(100, Math.floor(Math.pow(average, 1.2) * 2.5));
+          setVolume(normalizedVolume);
+
+          // Early Speech Detection: If volume drops after being high, trigger processing
+          if (state === "listening" && normalizedVolume < 5 && interimText.length > 3) {
+            if (!speechEndTimeoutRef.current) {
+              speechEndTimeoutRef.current = setTimeout(() => {
+                if (state === "listening" && interimText.length > 3) {
+                  processCommand(interimText);
+                  setInterimText("");
+                }
+              }, 1500); // 1.5 seconds of silence = end of speech
+            }
+          } else if (normalizedVolume > 10) {
+            if (speechEndTimeoutRef.current) {
+              clearTimeout(speechEndTimeoutRef.current);
+              speechEndTimeoutRef.current = null;
+            }
+          }
+
           animationFrameRef.current = requestAnimationFrame(updateVolume);
         };
 
+        if (currentAudioCtx.state === "suspended") {
+          await currentAudioCtx.resume();
+        }
         updateVolume();
       } catch (err) {
         console.error("Audio analysis failed", err);
@@ -177,8 +219,9 @@ export function JarvisAssistant() {
       if (currentFrame) cancelAnimationFrame(currentFrame);
       if (stream) stream.getTracks().forEach(t => t.stop());
       if (currentContext) currentContext.close();
+      if (speechEndTimeoutRef.current) clearTimeout(speechEndTimeoutRef.current);
     };
-  }, [state, setVolume]);
+  }, [state, setVolume, interimText, processCommand, speak, setState]);
 
   // Center overlay removed as per user request
   return null;
