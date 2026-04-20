@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { assistantTools } from "@/lib/ai/assistant";
+import { assistantTools, EGEMAN_SYSTEM_PROMPT } from "@/lib/ai/assistant";
 import { getGoogleApis } from "@/lib/google";
 import { prisma } from "@/lib/prisma";
 
@@ -19,10 +19,7 @@ export async function POST(req: Request) {
     // 1. Initial AI call to detect intent and tools
     const body = {
       system_instruction: { 
-        parts: [{ text: `Sen "Egeman" isminde profesyonel bir sesli asistansın. 
-        Kullanıcı: Nurevşan Doğan. Dil: Türkçe. 
-        Görev: Email, takvim ve not yönetimi. 
-        Kritik işlemlerde mutlaka "Onaylıyor musunuz?" diye sor.` }] 
+        parts: [{ text: EGEMAN_SYSTEM_PROMPT }] 
       },
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       tools: [{ function_declarations: assistantTools }],
@@ -47,6 +44,28 @@ export async function POST(req: Request) {
       // Handle the tools
       const apis = await getGoogleApis(userId);
       
+      if (name === "navigate_to") {
+        const page = args.page as string;
+        const pageMap: Record<string, string> = {
+          dashboard: "/dashboard",
+          email: "/dashboard/email",
+          calendar: "/dashboard/calendar",
+          tasks: "/dashboard/tasks",
+          notes: "/dashboard/notes",
+          library: "/dashboard/library",
+          documents: "/dashboard/documents",
+          ai: "/dashboard/ai",
+          notifications: "/dashboard/notifications",
+          settings: "/dashboard/settings",
+        };
+        const target = pageMap[page] || "/dashboard";
+        return NextResponse.json({ 
+          response: `Tabii ki, sizi ${page} sayfasına yönlendiriyorum.`,
+          action: "navigate",
+          target: target
+        });
+      }
+
       if (name === "get_emails") {
         if (!apis) return NextResponse.json({ response: "Google bağlantınız bulunamadı." });
         await apis.gmail.users.messages.list({ userId: "me", maxResults: 3 });

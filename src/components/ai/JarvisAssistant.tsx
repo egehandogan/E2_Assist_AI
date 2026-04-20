@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAssistantStore } from "@/lib/store";
 
 export function JarvisAssistant() {
+  const router = useRouter();
   const { state, setState, isWakeWordMode, setVolume } = useAssistantStore();
+  const [isPendingCommand, setIsPendingCommand] = useState(false);
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -37,9 +40,16 @@ export function JarvisAssistant() {
     if (maleVoice) utterance.voice = maleVoice;
     
     utterance.onstart = () => setState("speaking");
-    utterance.onend = () => setState(isWakeWordMode ? "idle" : "off");
+    utterance.onend = () => {
+      if (isPendingCommand) {
+        setIsPendingCommand(false);
+        setState("listening");
+      } else {
+        setState(isWakeWordMode ? "idle" : "off");
+      }
+    };
     synthRef.current.speak(utterance);
-  }, [isWakeWordMode, setState]);
+  }, [isWakeWordMode, setState, isPendingCommand]);
 
   const processCommand = useCallback(async (text: string) => {
     setState("processing");
@@ -54,6 +64,12 @@ export function JarvisAssistant() {
         if (!data.immediateFeedback) speak(data.response);
       }
       
+      if (data.action === "navigate" && data.target) {
+        setTimeout(() => {
+          router.push(data.target);
+        }, 1500); // Give some time for TTS to start/finish
+      }
+      
       if (data.actionRequired) {
         // Handle UI navigation or complex actions if needed
       }
@@ -61,7 +77,7 @@ export function JarvisAssistant() {
       speak("Üzgünüm, bir hata oluştu.");
       setState("idle");
     }
-  }, [speak, setState]);
+  }, [speak, setState, router]);
 
   useEffect(() => {
     recognitionRef.current.onresult = (event: any) => {
@@ -79,6 +95,7 @@ export function JarvisAssistant() {
         if (state === "listening") {
           processCommand(text);
         } else if (isWakeWordMode && text.includes("egeman")) {
+          setIsPendingCommand(true); // Flag to listen after Efendim
           setState("listening");
           speak("Efendim?");
         }
@@ -106,7 +123,7 @@ export function JarvisAssistant() {
         recognitionRef.current.stop();
       } catch {}
     };
-  }, [isWakeWordMode, state, speak, processCommand, setState]);
+  }, [isWakeWordMode, state, speak, processCommand, setState, isPendingCommand]);
 
   // Audio Level Analysis
   useEffect(() => {
